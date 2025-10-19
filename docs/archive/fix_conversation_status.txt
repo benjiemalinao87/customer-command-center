@@ -1,0 +1,16 @@
+Fix updateConversationStatus Error in ChatArea
+
+Key details and improvements:
+- Fixed runtime error: 'updateConversationStatus is not a function'
+- Replaced non-existent function with existing updateContact method
+- Updated contact conversation_status field correctly
+- Fixed dependency array to include the correct functions
+- Preserved all existing chat functionality
+
+Lessons Learned:
+- Verify function names before using them in components
+- Check store implementations for available methods
+- Use more descriptive field names for database columns
+- Prefer direct field updates over specialized functions for simpler state
+- Add error handling for failed status updates
+- Maintain consistent naming between database fields and component props

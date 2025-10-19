@@ -1,0 +1,615 @@
+openapi: 3.0.0
+info:
+  title: Notes AI Processor API
+  version: 1.0.0
+  description: |
+    Intelligent content processing API for the Notes system. Deployed on Cloudflare Workers for global edge performance.
+    
+    ## Features
+    - **Content Generation**: Create new content from prompts using GPT-4o
+    - **Content Enhancement**: Improve grammar, tone, and style
+    - **Content Summarization**: Create concise summaries
+    - **Content Expansion**: Elaborate with details and examples
+    
+    ## Performance
+    - Sub-50ms response times globally
+    - 99.99% uptime with edge deployment
+    - Smart caching and optimization
+    
+  contact:
+    name: API Support
+    email: support@customerconnects.app
+  license:
+    name: Proprietary
+    url: https://customerconnects.app/license
+
+servers:
+  - url: https://ai-notes.customerconnects.app/api/notes
+    description: Production AI API (Cloudflare Worker)
+  - url: https://notes-ai-processor.benjiemalinao879557.workers.dev
+    description: Direct Worker URL
+  - url: http://localhost:8787
+    description: Local Development (Wrangler)
+
+security:
+  - ApiKeyAuth: []
+  - NoAuth: []
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for external integrations (Zapier, Make.com, etc.)
+    NoAuth:
+      type: object
+      description: No authentication required for frontend use
+
+  schemas:
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+    
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "Error message describing what went wrong"
+    
+    AIMetadata:
+      type: object
+      properties:
+        tokensUsed:
+          type: integer
+          example: 446
+        processingTime:
+          type: integer
+          description: Processing time in milliseconds
+          example: 8739
+        model:
+          type: string
+          example: "gpt-4o"
+        wordCount:
+          type: integer
+          example: 252
+    
+    GenerateRequest:
+      type: object
+      required:
+        - workspaceId
+        - prompt
+      properties:
+        workspaceId:
+          type: integer
+          example: 15213
+        prompt:
+          type: string
+          example: "Write a comprehensive guide about implementing AI chatbots"
+        noteId:
+          type: string
+          description: Optional note ID for tracking
+          example: "note_123"
+        options:
+          type: object
+          properties:
+            context:
+              type: string
+              enum: [note-creation, technical-documentation, business-notes]
+              example: "technical-documentation"
+            maxTokens:
+              type: integer
+              minimum: 100
+              maximum: 1500
+              example: 1000
+            temperature:
+              type: number
+              minimum: 0.0
+              maximum: 1.0
+              example: 0.8
+    
+    GenerateResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            content:
+              type: string
+              example: "# AI Chatbot Implementation Guide\n\nImplementing AI chatbots requires careful planning..."
+            metadata:
+              $ref: '#/components/schemas/AIMetadata'
+    
+    EnhanceRequest:
+      type: object
+      required:
+        - workspaceId
+        - content
+      properties:
+        workspaceId:
+          type: integer
+          example: 15213
+        content:
+          type: string
+          example: "AI helps customers get quick responses and solve problems faster."
+        enhancementType:
+          type: string
+          enum: [grammar, tone, style, general]
+          default: general
+          example: "style"
+        noteId:
+          type: string
+          example: "note_123"
+        options:
+          type: object
+          properties:
+            targetTone:
+              type: string
+              example: "professional"
+    
+    EnhanceResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            original:
+              type: string
+              example: "AI helps customers get quick responses and solve problems faster."
+            enhanced:
+              type: string
+              example: "Artificial Intelligence empowers customers to receive immediate responses..."
+            enhancementType:
+              type: string
+              example: "style"
+            metadata:
+              allOf:
+                - $ref: '#/components/schemas/AIMetadata'
+                - type: object
+                  properties:
+                    improvementRatio:
+                      type: number
+                      example: 1.85
+    
+    SummarizeRequest:
+      type: object
+      required:
+        - workspaceId
+        - content
+      properties:
+        workspaceId:
+          type: integer
+          example: 15213
+        content:
+          type: string
+          example: "Artificial Intelligence has revolutionized customer service by enabling instant responses..."
+        summaryLength:
+          type: string
+          enum: [short, medium, long, bullet]
+          default: medium
+          example: "bullet"
+        noteId:
+          type: string
+          example: "note_123"
+        options:
+          type: object
+    
+    SummarizeResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            original:
+              type: string
+              example: "Artificial Intelligence has revolutionized customer service..."
+            summary:
+              type: string
+              example: "• AI enables instant responses and 24/7 customer service availability..."
+            summaryLength:
+              type: string
+              example: "bullet"
+            metadata:
+              allOf:
+                - $ref: '#/components/schemas/AIMetadata'
+                - type: object
+                  properties:
+                    compressionRatio:
+                      type: number
+                      example: 3.2
+    
+    ExpandRequest:
+      type: object
+      required:
+        - workspaceId
+        - content
+      properties:
+        workspaceId:
+          type: integer
+          example: 15213
+        content:
+          type: string
+          example: "AI chatbots improve customer service efficiency."
+        expandType:
+          type: string
+          enum: [elaborate, examples, context, details]
+          default: elaborate
+          example: "examples"
+        noteId:
+          type: string
+          example: "note_123"
+        options:
+          type: object
+    
+    ExpandResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            original:
+              type: string
+              example: "AI chatbots improve customer service efficiency."
+            expanded:
+              type: string
+              example: "AI chatbots significantly improve customer service efficiency..."
+            expandType:
+              type: string
+              example: "examples"
+            metadata:
+              allOf:
+                - $ref: '#/components/schemas/AIMetadata'
+                - type: object
+                  properties:
+                    expansionRatio:
+                      type: number
+                      example: 8.7
+    
+    HealthResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            service:
+              type: string
+              example: "notes-ai-processor"
+            timestamp:
+              type: string
+              format: date-time
+              example: "2025-07-29T14:32:52.854Z"
+            features:
+              type: object
+              properties:
+                generate_content:
+                  type: boolean
+                  example: true
+                enhance_content:
+                  type: boolean
+                  example: true
+                summarize_content:
+                  type: boolean
+                  example: true
+                expand_content:
+                  type: boolean
+                  example: true
+
+  parameters:
+    WorkspaceHeader:
+      name: X-Workspace-ID
+      in: header
+      required: true
+      schema:
+        type: integer
+        example: 15213
+      description: Workspace identifier for context isolation
+
+  responses:
+    BadRequest:
+      description: Bad request - missing or invalid parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: "Missing required parameters: workspaceId, prompt"
+    
+    Unauthorized:
+      description: Unauthorized - invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: "Invalid API key"
+    
+    Forbidden:
+      description: Forbidden - AI features not enabled for workspace
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: "Notes AI features are not enabled for this workspace"
+    
+    TooManyRequests:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Type:
+          schema:
+            type: string
+            example: "api_key"
+        X-RateLimit-Operation:
+          schema:
+            type: string
+            example: "generate"
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+            example: 1000
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+            example: 842
+        X-RateLimit-Reset:
+          schema:
+            type: string
+            format: date-time
+            example: "2025-07-29T15:32:52.854Z"
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: "Rate limit exceeded. Please try again later."
+    
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error: "OpenAI API error: 503 - Service temporarily unavailable"
+
+paths:
+  /health:
+    get:
+      summary: Health Check
+      description: Check service availability and feature status
+      operationId: healthCheck
+      security:
+        - NoAuth: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      tags:
+        - Health
+
+  /generate:
+    post:
+      summary: Generate Content
+      description: |
+        Generate new content based on a prompt using GPT-4o. Perfect for creating 
+        initial drafts, expanding on ideas, or generating content from minimal input.
+      operationId: generateContent
+      security:
+        - ApiKeyAuth: []
+        - NoAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateRequest'
+            examples:
+              basic:
+                summary: Basic content generation
+                value:
+                  workspaceId: 15213
+                  prompt: "Write a summary about AI in customer service"
+              advanced:
+                summary: Advanced with options
+                value:
+                  workspaceId: 15213
+                  prompt: "Create a technical implementation guide for chatbot integration"
+                  noteId: "note_123"
+                  options:
+                    context: "technical-documentation"
+                    maxTokens: 1200
+                    temperature: 0.7
+      responses:
+        '200':
+          description: Content generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      tags:
+        - Content Operations
+
+  /enhance:
+    post:
+      summary: Enhance Content
+      description: |
+        Improve existing content with grammar correction, tone adjustment, 
+        style enhancement, or comprehensive improvements.
+      operationId: enhanceContent
+      security:
+        - ApiKeyAuth: []
+        - NoAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnhanceRequest'
+            examples:
+              grammar:
+                summary: Grammar correction
+                value:
+                  workspaceId: 15213
+                  content: "AI help customers to get quick response and solve problem faster."
+                  enhancementType: "grammar"
+              tone:
+                summary: Tone adjustment
+                value:
+                  workspaceId: 15213
+                  content: "Hey, our AI is pretty cool and helps users out."
+                  enhancementType: "tone"
+                  options:
+                    targetTone: "professional"
+      responses:
+        '200':
+          description: Content enhanced successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnhanceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      tags:
+        - Content Operations
+
+  /summarize:
+    post:
+      summary: Summarize Content
+      description: |
+        Create concise summaries of lengthy content. Choose from different 
+        summary lengths and formats including bullet points.
+      operationId: summarizeContent
+      security:
+        - ApiKeyAuth: []
+        - NoAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SummarizeRequest'
+            examples:
+              basic:
+                summary: Basic summarization
+                value:
+                  workspaceId: 15213
+                  content: "Artificial Intelligence has revolutionized customer service by enabling instant responses, 24/7 availability, and personalized interactions. Companies implementing AI chatbots have seen significant improvements in customer satisfaction scores and operational efficiency."
+                  summaryLength: "medium"
+              bullet:
+                summary: Bullet point summary
+                value:
+                  workspaceId: 15213
+                  content: "Long article content here..."
+                  summaryLength: "bullet"
+      responses:
+        '200':
+          description: Content summarized successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummarizeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      tags:
+        - Content Operations
+
+  /expand:
+    post:
+      summary: Expand Content
+      description: |
+        Elaborate on brief content by adding details, examples, context, 
+        or specific information to make it more comprehensive.
+      operationId: expandContent
+      security:
+        - ApiKeyAuth: []
+        - NoAuth: []
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExpandRequest'
+            examples:
+              elaborate:
+                summary: Basic elaboration
+                value:
+                  workspaceId: 15213
+                  content: "AI chatbots improve customer service efficiency."
+                  expandType: "elaborate"
+              examples:
+                summary: Add examples
+                value:
+                  workspaceId: 15213
+                  content: "Machine learning models can predict customer behavior."
+                  expandType: "examples"
+      responses:
+        '200':
+          description: Content expanded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpandResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      tags:
+        - Content Operations
+
+tags:
+  - name: Health
+    description: Service health and status endpoints
+  - name: Content Operations
+    description: AI-powered content processing operations

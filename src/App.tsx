@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BarChart3, Calendar, Moon, Sun, Users, Shield, LogOut, Activity, UserCheck, BarChart2, FileText, Database } from 'lucide-react';
+import { BarChart3, Calendar, Moon, Sun, Users, Shield, LogOut, Activity, UserCheck, BarChart2, FileText, Database, Book } from 'lucide-react';
 import { PerformanceDashboard } from './features/dashboard';
 import { Visitors } from './features/visitors';
 import { UserActivity } from './features/user-activity/components/UserActivity';
@@ -7,12 +7,13 @@ import { UserDetails } from './features/user-details/components/UserDetails';
 import { ApiMonitoring } from './features/api-monitoring/components/ApiMonitoring';
 import { ActivityLogs } from './features/activity-logs/components/ActivityLogs';
 import { CacheSystem } from './features/cache-system/components/CacheSystem';
+import { Documentation } from './features/documentation';
 import { AdminDashboard } from './components/AdminDashboard';
 import { Login } from './components/Login';
 import { useSettings } from './shared/components/ui/Settings';
 import { supabase, getCurrentUser } from './lib/supabase';
 
-type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'cache-system' | 'admin';
+type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'cache-system' | 'documentation' | 'admin';
 
 function App() {
   const [currentView, setCurrentView] = useState<View>('dashboard');
@@ -201,6 +202,17 @@ function App() {
                   Cache
                 </button>
                 <button
+                  onClick={() => setCurrentView('documentation')}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
+                    currentView === 'documentation'
+                      ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
+                  }`}
+                >
+                  <Book className="w-4 h-4" />
+                  Docs
+                </button>
+                <button
                   onClick={() => setCurrentView('admin')}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
                     currentView === 'admin'
@@ -287,6 +299,10 @@ function App() {
 
           {currentView === 'cache-system' && (
             <CacheSystem />
+          )}
+
+          {currentView === 'documentation' && (
+            <Documentation />
           )}
 
           {currentView === 'admin' && (

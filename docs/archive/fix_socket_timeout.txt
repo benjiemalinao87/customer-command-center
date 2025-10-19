@@ -1,0 +1,16 @@
+Fix Socket Join Room Timeout
+
+Key details and improvements:
+- Increased socket join room timeout from 5 seconds to 25 seconds
+- Created dedicated joinRoomWithTimeout function for better error handling
+- Fixed 'join room timeout' error when selecting contacts
+- Added better logging for socket connection lifecycle
+- Improved room cleanup by tracking active contact ID
+
+Lessons Learned:
+- Socket timeouts should align with or exceed the underlying socket configuration
+- Extract complex async operations into dedicated functions for better maintainability
+- Add detailed logging throughout socket connection lifecycle
+- Track the currently active contact to prevent room conflicts
+- Implement proper cleanup handling for socket connections
+- Use longer timeouts for network operations that may experience latency

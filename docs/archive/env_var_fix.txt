@@ -1,0 +1,14 @@
+Fix EmailService: Update environment variable reference
+
+Key details and improvements:
+- Updated EmailService to use existing SUPABASE_SERVICE_KEY environment variable
+- Aligned with application's variable naming conventions
+- Fixed deployment error in Railway
+- Maintained consistent environment variable structure
+
+Lessons Learned:
+- Always verify environment variable names across the application
+- Maintain consistent naming conventions for environment variables
+- Match code to existing environment variable structure rather than vice versa
+- Document environment variable requirements for deployment
+- Update code to match established patterns rather than creating new variables

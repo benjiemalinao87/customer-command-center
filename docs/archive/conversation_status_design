@@ -1,0 +1,40 @@
+## **Conversation Status Design – Developer Guide**  
+
+### **Overview**  
+The conversation status is a **contact-level attribute** that determines the current state of a conversation. It applies globally across the app and can be updated manually by agents or automatically by the system.  
+
+### **Conversation Statuses & Update Rules**  
+
+| Status   | Default? | How It's Set | How It's Cleared | Purpose |
+|----------|---------|-------------|------------------|---------|
+| **Open** | ✅ Default when a contact sends a new message | Auto: When a contact messages the app<br>Manual: Agent can move to Open | Manual: Agent moves it to another status | The active state for ongoing conversations |
+| **Pending** | ❌ | Manual: Agent marks it as Pending | Manual: Agent moves it to another status | Used when an agent wants to return to a conversation later |
+| **Done** | ❌ | Manual: Agent marks it as Done | Manual: Agent moves it to another status or contact messages again | Used when an agent considers the conversation resolved |
+| **Spam** | ❌ | Manual: Agent marks it as Spam | Manual: Agent moves it to another status | Used to filter out unwanted messages |
+| **Invalid** | ❌ | Manual: Agent marks it as Invalid | Manual: Agent moves it to another status | Used for incorrect or irrelevant contacts |
+
+### **System Behavior & Logic**  
+1. **Status Persistence**  
+   - Conversation status is assigned **at the contact level** and applies across all app pages:  
+     - **Livechat** (default workspace)  
+     - **Contact Page** (individual contact details)  
+     - **Pipelines** (lead tracking)  
+
+2. **Automatic Updates**  
+   - **New Incoming Message:** Moves the contact to **Open** (unless currently **Spam** or **Invalid**).  
+   - **Agent Updates:** Status can only be changed manually after being set to Open.  
+   - **Done Contacts Messaging Again:** If a contact marked as **Done** sends a new message, status moves back to **Open** automatically.  
+
+3. **Filtering & Visibility**  
+   - **Livechat Default View:** Only contacts in **Open** status appear in Livechat by default.  
+   - **Pending Filter:** Agents can filter for Pending conversations for follow-ups.  
+   - **Done Archive:** Done conversations do not appear in Open but can be accessed if needed.  
+
+
+- **Livechat UI:**  
+  - Default **Livechat view** shows only `open` status.  
+  - Agents must have a dropdown or button to manually update status.  
+
+
+## important note
+The conversation status feature helps agents track and manage the state of conversations with contacts. This design ensures the feature integrates seamlessly with the existing Twilio integration for inbound and outbound messaging.
