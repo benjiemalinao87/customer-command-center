@@ -35,21 +35,16 @@ export function ActivityLogs() {
     try {
       setLoading(true);
       const response = await adminApi.getAdminLogs(limit, filterActionType || null);
-      setLogs(response.data || []);
+      // Map backend data to component format - admin_access logs are successful by default
+      const mappedLogs = (response.data || []).map((log: any) => ({
+        ...log,
+        details: log.reason || log.details || 'No details available',
+        success: true // Admin access logs are successful if they're recorded
+      }));
+      setLogs(mappedLogs);
     } catch (error) {
       console.error('Error loading admin logs:', error);
-      // Use mock data for demonstration
-      setLogs([
-        {
-          id: '1',
-          action_type: 'ADMIN_ACCESS',
-          details: 'Admin dashboard accessed',
-          ip_address: '149.167.63.189',
-          user_agent: 'Admin Dashboard',
-          created_at: new Date().toISOString(),
-          success: false
-        }
-      ]);
+      setLogs([]);
     } finally {
       setLoading(false);
     }

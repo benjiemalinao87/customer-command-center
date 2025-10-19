@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { RefreshCw, Clock, MapPin, Building2, Zap } from 'lucide-react';
+import { getActiveSessions } from '../../../lib/supabaseAdmin';
 
 // Active user session interface for SaaS platform
 interface ActiveSession {
@@ -19,215 +20,64 @@ interface ActiveSession {
   status: 'active' | 'idle';
 }
 
-// Mock active sessions data for SaaS platform
-const mockActiveSessions: ActiveSession[] = [
-  {
-    id: '1',
-    userId: 'usr_001',
-    userName: 'Sarah Johnson',
-    userEmail: 'sarah@techflow.com',
-    workspaceName: 'TechFlow Inc',
-    workspaceId: 'ws_001',
-    role: 'admin',
-    location: 'San Francisco, CA',
-    loginTime: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
-    lastActivity: 'Just now',
-    sessionDuration: '15m',
-    currentPage: '/dashboard/analytics',
-    mostUsedFeature: 'SMS Campaigns',
-    status: 'active'
-  },
-  {
-    id: '2',
-    userId: 'usr_002',
-    userName: 'Michael Chen',
-    userEmail: 'michael@datavision.com',
-    workspaceName: 'DataVision Corp',
-    workspaceId: 'ws_002',
-    role: 'owner',
-    location: 'New York, NY',
-    loginTime: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-    lastActivity: '2 mins ago',
-    sessionDuration: '45m',
-    currentPage: '/settings/billing',
-    mostUsedFeature: 'Billing & Usage',
-    status: 'active'
-  },
-  {
-    id: '3',
-    userId: 'usr_003',
-    userName: 'Emily Rodriguez',
-    userEmail: 'emily@cloudscale.io',
-    workspaceName: 'CloudScale Solutions',
-    workspaceId: 'ws_003',
-    role: 'agent',
-    location: 'Austin, TX',
-    loginTime: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-    lastActivity: '5 mins ago',
-    sessionDuration: '30m',
-    currentPage: '/livechat/messages',
-    mostUsedFeature: 'Live Chat',
-    status: 'idle'
-  },
-  {
-    id: '4',
-    userId: 'usr_004',
-    userName: 'David Kim',
-    userEmail: 'david@aidynamics.com',
-    workspaceName: 'AI Dynamics Ltd',
-    workspaceId: 'ws_004',
-    role: 'admin',
-    location: 'Seattle, WA',
-    loginTime: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
-    lastActivity: '1 min ago',
-    sessionDuration: '2h',
-    currentPage: '/api/documentation',
-    mostUsedFeature: 'API Integration',
-    status: 'active'
-  },
-  {
-    id: '5',
-    userId: 'usr_005',
-    userName: 'Jessica Brown',
-    userEmail: 'jessica@digitalfrontier.com',
-    workspaceName: 'Digital Frontier',
-    workspaceId: 'ws_005',
-    role: 'agent',
-    location: 'Miami, FL',
-    loginTime: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
-    lastActivity: 'Just now',
-    sessionDuration: '25m',
-    currentPage: '/dashboard/overview',
-    mostUsedFeature: 'Dashboard',
-    status: 'active'
-  },
-  {
-    id: '6',
-    userId: 'usr_006',
-    userName: 'James Wilson',
-    userEmail: 'james@techflow.com',
-    workspaceName: 'TechFlow Inc',
-    workspaceId: 'ws_001',
-    role: 'agent',
-    location: 'San Francisco, CA',
-    loginTime: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
-    lastActivity: '10 mins ago',
-    sessionDuration: '1h',
-    currentPage: '/sms/campaigns',
-    mostUsedFeature: 'SMS Campaigns',
-    status: 'idle'
-  },
-  {
-    id: '7',
-    userId: 'usr_007',
-    userName: 'Maria Garcia',
-    userEmail: 'maria@datavision.com',
-    workspaceName: 'DataVision Corp',
-    workspaceId: 'ws_002',
-    role: 'admin',
-    location: 'New York, NY',
-    loginTime: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
-    lastActivity: 'Just now',
-    sessionDuration: '1h 30m',
-    currentPage: '/users/management',
-    mostUsedFeature: 'User Management',
-    status: 'active'
-  },
-  {
-    id: '8',
-    userId: 'usr_008',
-    userName: 'Robert Taylor',
-    userEmail: 'robert@cloudscale.io',
-    workspaceName: 'CloudScale Solutions',
-    workspaceId: 'ws_003',
-    role: 'owner',
-    location: 'Austin, TX',
-    loginTime: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
-    lastActivity: '3 mins ago',
-    sessionDuration: '3h',
-    currentPage: '/integrations/setup',
-    mostUsedFeature: 'Integrations',
-    status: 'active'
-  },
-  {
-    id: '9',
-    userId: 'usr_009',
-    userName: 'Linda Martinez',
-    userEmail: 'linda@aidynamics.com',
-    workspaceName: 'AI Dynamics Ltd',
-    workspaceId: 'ws_004',
-    role: 'agent',
-    location: 'Seattle, WA',
-    loginTime: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
-    lastActivity: 'Just now',
-    sessionDuration: '10m',
-    currentPage: '/dashboard/analytics',
-    mostUsedFeature: 'Analytics',
-    status: 'active'
-  },
-  {
-    id: '10',
-    userId: 'usr_010',
-    userName: 'Thomas Anderson',
-    userEmail: 'thomas@digitalfrontier.com',
-    workspaceName: 'Digital Frontier',
-    workspaceId: 'ws_005',
-    role: 'admin',
-    location: 'Miami, FL',
-    loginTime: new Date(Date.now() - 1000 * 60 * 50).toISOString(),
-    lastActivity: '7 mins ago',
-    sessionDuration: '50m',
-    currentPage: '/settings/workspace',
-    mostUsedFeature: 'Workspace Settings',
-    status: 'idle'
-  },
-  {
-    id: '11',
-    userId: 'usr_011',
-    userName: 'Patricia Lee',
-    userEmail: 'patricia@techflow.com',
-    workspaceName: 'TechFlow Inc',
-    workspaceId: 'ws_001',
-    role: 'agent',
-    location: 'Los Angeles, CA',
-    loginTime: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
-    lastActivity: '4 mins ago',
-    sessionDuration: '35m',
-    currentPage: '/livechat/inbox',
-    mostUsedFeature: 'Live Chat',
-    status: 'active'
-  },
-  {
-    id: '12',
-    userId: 'usr_012',
-    userName: 'Christopher Moore',
-    userEmail: 'chris@cloudscale.io',
-    workspaceName: 'CloudScale Solutions',
-    workspaceId: 'ws_003',
-    role: 'agent',
-    location: 'Denver, CO',
-    loginTime: new Date(Date.now() - 1000 * 60 * 20).toISOString(),
-    lastActivity: 'Just now',
-    sessionDuration: '20m',
-    currentPage: '/triggers/automation',
-    mostUsedFeature: 'Automation Triggers',
-    status: 'active'
-  }
-];
 
 export function Visitors() {
-  const [sessions] = useState<ActiveSession[]>(mockActiveSessions);
+  const [sessions, setSessions] = useState<ActiveSession[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const handleRefresh = () => {
+  // Load real session data
+  const loadSessions = async () => {
+    try {
+      console.log('🔵 Fetching active sessions from Supabase...');
+      const realSessions = await getActiveSessions();
+      console.log('✅ Real sessions loaded:', realSessions.length);
+      setSessions(realSessions);
+    } catch (error) {
+      console.error('❌ Error loading sessions:', error);
+      // Fallback to empty array if error
+      setSessions([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSessions();
+    
+    // Set up auto-refresh every 30 seconds
+    const interval = setInterval(loadSessions, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
+    await loadSessions();
+    setRefreshing(false);
   };
 
   // Calculate stats
   const activeSessions = sessions.filter(s => s.status === 'active').length;
   const idleSessions = sessions.filter(s => s.status === 'idle').length;
   const uniqueWorkspaces = new Set(sessions.map(s => s.workspaceId)).size;
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Active User Sessions</h2>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">
+              Loading real-time session data...
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -313,34 +163,52 @@ export function Visitors() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 dark:bg-gray-700/50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  User
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Workspace
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Role
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Location
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Most Used Feature
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Session
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {sessions.map((session) => (
+          {sessions.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center">
+                <Building2 className="w-8 h-8 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">No Active Sessions</h3>
+              <p className="text-gray-500 dark:text-gray-400 mb-4">
+                No users are currently logged in. Sessions will appear here when users sign in.
+              </p>
+              <button
+                onClick={handleRefresh}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Check Again
+              </button>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead className="bg-gray-50 dark:bg-gray-700/50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    User
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Workspace
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Role
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Location
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Most Used Feature
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Session
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {sessions.map((session) => (
                 <tr
                   key={session.id}
                   className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
@@ -421,9 +289,10 @@ export function Visitors() {
                     </div>
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>

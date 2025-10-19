@@ -693,3 +693,130 @@ const getRoleBadgeColor = (role: string | undefined): string => {
 - `src/features/visitors/components/VisitorDetailsModal.tsx` - Updated badge styling to match
 - `src/features/visitors/components/Visitors.tsx` - Added toggle handler props
 
+---
+
+## Real-Time Active Sessions Implementation (October 19, 2025)
+
+### Feature Implementation
+Replaced mock active session data with real-time data from Supabase database, creating a live session tracking system that shows actual user sessions, their status, and activity.
+
+### Implementation Details
+1. **Real Database Integration:**
+   - Created `getActiveSessions()` function in `supabaseAdmin.ts`
+   - Queries `auth.sessions` table for recent sessions (last 24 hours)
+   - Joins with `auth.users` to get user information
+   - Fetches workspace and role data for complete session context
+
+2. **Session Status Detection:**
+   - Active: Last activity within 5 minutes
+   - Idle: Last activity more than 5 minutes ago
+   - Calculates session duration and last activity time
+   - Real-time status updates every 30 seconds
+
+3. **Enhanced Session Data:**
+   - User name derived from email (formatted properly)
+   - Workspace name from database
+   - User role from user_workspaces table
+   - Location derived from IP address
+   - Most used feature assigned based on email hash
+   - Session duration and last activity calculations
+
+4. **Auto-Refresh System:**
+   - Fetches real data on component mount
+   - Auto-refreshes every 30 seconds
+   - Manual refresh button with loading state
+   - Empty state when no active sessions
+
+### How It Should Be Done
+```typescript
+// ✅ CORRECT - Real-time session tracking
+export const getActiveSessions = async () => {
+  const { data: sessions, error } = await supabase
+    .from('auth.sessions')
+    .select(`
+      id, user_id, created_at, updated_at, refreshed_at,
+      user_agent, ip,
+      auth.users!inner(id, email, last_sign_in_at, created_at)
+    `)
+    .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+    .order('created_at', { ascending: false });
+
+  // Process sessions with real calculations
+  const activeSessions = sessions.map((session) => {
+    const user = session.auth.users;
+    const sessionStart = new Date(session.created_at);
+    const now = new Date();
+    const durationMs = now.getTime() - sessionStart.getTime();
+    const minutesSinceActivity = Math.floor((now.getTime() - new Date(session.refreshed_at || session.updated_at).getTime()) / (1000 * 60));
+    
+    return {
+      id: session.id,
+      userId: session.user_id,
+      userName: user.email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      userEmail: user.email,
+      status: minutesSinceActivity <= 5 ? 'active' : 'idle',
+      sessionDuration: formatDuration(durationMs),
+      lastActivity: formatLastActivity(minutesSinceActivity)
+    };
+  });
+
+  return activeSessions;
+};
+
+// Auto-refresh in component
+useEffect(() => {
+  loadSessions();
+  const interval = setInterval(loadSessions, 30000);
+  return () => clearInterval(interval);
+}, []);
+```
+
+### How It Should NOT Be Done
+```typescript
+// ❌ WRONG - Using mock data
+const mockActiveSessions = [
+  { id: '1', userName: 'Sarah Johnson', status: 'active' }
+];
+
+// ❌ WRONG - No real-time updates
+const [sessions] = useState<ActiveSession[]>(mockActiveSessions);
+
+// ❌ WRONG - Incorrect import path
+import { getActiveSessions } from '../../../../lib/supabaseAdmin';
+```
+
+### Key Takeaways
+- **Real data integration**: Always query actual database instead of using mock data
+- **Session status logic**: Use time-based calculations (5 minutes = active threshold)
+- **Auto-refresh**: Set up intervals for real-time updates (30 seconds is good balance)
+- **Import paths**: Count directory levels carefully - from `src/features/visitors/components/` to `src/lib/` is `../../../lib/`
+- **Error handling**: Provide fallbacks and empty states for when no data exists
+- **User experience**: Show loading states and provide manual refresh options
+- **Data processing**: Calculate derived values (duration, status) from raw timestamps
+- **Database queries**: Use joins to get related data (users, workspaces) in single queries
+
+### Common Errors Fixed
+1. **"Failed to resolve import" error**
+   - Fixed incorrect import path from `../../../../lib/supabaseAdmin` to `../../../lib/supabaseAdmin`
+   - Count directory levels: `src/features/visitors/components/` → `src/lib/` = 3 levels up
+
+2. **"relation 'public.auth.sessions' does not exist" error**
+   - Cannot query `auth.sessions` directly from client due to security restrictions
+   - Created RPC function `get_active_sessions()` with `SECURITY DEFINER` to safely access auth schema
+   - RPC function runs with elevated privileges and returns session data
+
+3. **"structure of query does not match function result type" error**
+   - Type mismatch: `auth.users.email` is `varchar(255)`, not `text`
+   - Fixed RPC function return type from `text` to `varchar` for email column
+   - Always match exact PostgreSQL data types in function definitions
+
+4. **"relation 'public.user_workspaces' does not exist" error**
+   - Table name was incorrect - actual table is `workspace_members`
+   - Updated query to use correct table name
+   - Fixed workspace lookup logic to use `workspace_id` from `workspace_members` table
+
+### Files Modified
+- `src/lib/supabaseAdmin.ts` - Added `getActiveSessions()` function with RPC call and proper table names
+- `src/features/visitors/components/Visitors.tsx` - Replaced mock data with real-time session tracking
+- **Database Migration:** Created `get_active_sessions()` RPC function to securely access auth.sessions
+

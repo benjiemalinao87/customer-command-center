@@ -9,6 +9,7 @@ import { ActivityLogs } from './features/activity-logs/components/ActivityLogs';
 import { CacheSystem } from './features/cache-system/components/CacheSystem';
 import { AdminDashboard } from './components/AdminDashboard';
 import { Login } from './components/Login';
+import { useSettings } from './shared/components/ui/Settings';
 import { supabase, getCurrentUser } from './lib/supabase';
 
 type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'cache-system' | 'admin';
@@ -17,6 +18,7 @@ function App() {
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const settings = useSettings();
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode');
     if (saved !== null) {
@@ -106,13 +108,6 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <img
-                  src="https://channelautomation.com/wp-content/uploads/2022/11/logofooter2.png"
-                  alt="Channel Automation"
-                  className="h-8 w-auto object-contain"
-                />
-              </div>
             </div>
 
             <div className="flex items-center gap-4">
@@ -234,7 +229,7 @@ function App() {
 
       {/* Scrollable Content Area */}
       <main className="flex-1 overflow-y-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 transition-all duration-300">
+        <div className={`${settings.wideLayout ? 'max-w-none' : 'max-w-7xl'} mx-auto px-4 sm:px-6 lg:px-8 py-8 transition-all duration-300`}>
           {currentView === 'dashboard' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">

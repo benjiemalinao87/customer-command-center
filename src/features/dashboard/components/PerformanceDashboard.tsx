@@ -5,17 +5,15 @@ import {
   Activity,
   TrendingUp,
   Globe,
-  MapPin,
   Zap,
   Clock,
   Database,
-  BarChart3,
-  MessageSquare
+  BarChart3
 } from 'lucide-react';
 import { MetricCard } from '../../../shared/components/ui';
 import { MultiLineChart } from '../../../shared/components/charts';
 import { DonutChart } from '../../../shared/components/charts';
-import { BarChart } from '../../../shared/components/charts';
+import { useSettings } from '../../../shared/components/ui/Settings';
 import { adminApi } from '../../../lib/adminApi';
 import {
   getTotalUsers,
@@ -24,7 +22,8 @@ import {
   getTotalLoginsToday,
   getPlatformUsageTrends,
   getGeographicDistribution,
-  getMostUsedEndpoints
+  getMostUsedEndpoints,
+  getTopCompaniesByUsage
 } from '../../../lib/supabaseAdmin';
 
 interface PerformanceDashboardProps {
@@ -34,7 +33,7 @@ interface PerformanceDashboardProps {
 export function PerformanceDashboard({ dateRange }: PerformanceDashboardProps) {
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
-  const [supabaseMetrics, setSupabaseMetrics] = useState<any>(null);
+  const settings = useSettings();
 
   useEffect(() => {
     loadData();
@@ -46,7 +45,7 @@ export function PerformanceDashboard({ dateRange }: PerformanceDashboardProps) {
       // Fetch data from both backend API and Supabase in parallel
       console.log('🔵 Fetching dashboard data from backend and Supabase...');
 
-      const [backendResponse, totalUsers, roleBreakdown, apiRequests, totalLogins, usageTrends, geoDistribution, topEndpoints] = await Promise.all([
+      const [backendResponse, totalUsers, roleBreakdown, apiRequests, totalLogins, usageTrends, geoDistribution, topEndpoints, topCompanies] = await Promise.all([
         adminApi.getDashboardOverview().catch(err => {
           console.warn('Backend API failed:', err);
           return null;
@@ -57,7 +56,8 @@ export function PerformanceDashboard({ dateRange }: PerformanceDashboardProps) {
         getTotalLoginsToday(),
         getPlatformUsageTrends(7),
         getGeographicDistribution(),
-        getMostUsedEndpoints()
+        getMostUsedEndpoints(),
+        getTopCompaniesByUsage()
       ]);
 
       console.log('✅ Backend Response:', backendResponse);
@@ -79,11 +79,11 @@ export function PerformanceDashboard({ dateRange }: PerformanceDashboardProps) {
         },
         usageTrends,
         geoDistribution,
-        topEndpoints
+        topEndpoints,
+        topCompanies
       };
 
       setDashboardData(mergedData);
-      setSupabaseMetrics({ totalUsers, roleBreakdown, apiRequests, totalLogins });
     } catch (error) {
       console.error('❌ Error loading dashboard data:', error);
       console.error('❌ Error details:', error instanceof Error ? error.message : error);
@@ -161,7 +161,7 @@ export function PerformanceDashboard({ dateRange }: PerformanceDashboardProps) {
   const { overview } = dashboardData || {};
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 transition-all duration-300 ${settings.wideLayout ? 'max-w-none' : ''}`}>
       {/* Top Metrics Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
@@ -354,35 +354,41 @@ export function PerformanceDashboard({ dateRange }: PerformanceDashboardProps) {
         </div>
 
         <div className="space-y-3">
-          {[
-            { name: 'TechFlow Inc', requests: 28700, color: '#ec4899' },
-            { name: 'DataVision Corp', requests: 24500, color: '#8b5cf6' },
-            { name: 'CloudScale Solutions', requests: 19800, color: '#3b82f6' },
-            { name: 'AI Dynamics Ltd', requests: 16200, color: '#10b981' },
-            { name: 'Digital Frontier', requests: 12400, color: '#f59e0b' }
-          ].map((company, index) => (
-            <div key={company.name} className="flex items-center justify-between">
-              <div className="flex items-center gap-3 flex-1">
-                <div
-                  className="w-1 h-12 rounded-full"
-                  style={{ backgroundColor: company.color }}
-                />
-                <div>
-                  <p className="font-medium text-gray-900 dark:text-gray-100">
-                    {company.name}
-                  </p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {company.requests.toLocaleString()} requests
-                  </p>
+          {dashboardData?.topCompanies && dashboardData.topCompanies.length > 0 ? (
+            dashboardData.topCompanies.map((company: any, index: number) => (
+              <div key={company.name || index} className="flex items-center justify-between">
+                <div className="flex items-center gap-3 flex-1">
+                  <div
+                    className="w-1 h-12 rounded-full"
+                    style={{ backgroundColor: company.color }}
+                  />
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">
+                      {company.name}
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {company.requests.toLocaleString()} requests
+                      {company.industry && ` • ${company.industry}`}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                    {company.requests.toLocaleString()}
+                  </span>
+                  {company.size && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {company.size}
+                    </p>
+                  )}
                 </div>
               </div>
-              <div className="text-right">
-                <span className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                  {company.requests.toLocaleString()}
-                </span>
-              </div>
-            </div>
-          ))}
+            ))
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+              No company data available yet
+            </p>
+          )}
         </div>
       </div>
     </div>

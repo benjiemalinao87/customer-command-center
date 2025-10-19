@@ -12,17 +12,26 @@ import {
   DollarSign,
   Shield,
   Database,
-  Zap
+  Zap,
+  Monitor
 } from 'lucide-react';
 import { adminApi } from '../lib/adminApi';
 import { MetricCard } from '../shared/components/ui/MetricCard';
 import { AdminWorkspaceTable } from './AdminWorkspaceTable';
+import { useSettings } from '../shared/components/ui/Settings';
 
 export function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
   const [dashboardData, setDashboardData] = useState<any>(null);
+  const settings = useSettings();
+
+  const toggleWideLayout = () => {
+    const newSettings = { wideLayout: !settings.wideLayout };
+    localStorage.setItem('tippen_settings', JSON.stringify(newSettings));
+    window.dispatchEvent(new CustomEvent('settingsChanged', { detail: newSettings }));
+  };
 
   useEffect(() => {
     checkAdminAccessAndLoadData();
@@ -88,11 +97,38 @@ export function AdminDashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Workspace Management</h2>
-        <p className="text-gray-600 dark:text-gray-400 mt-1">
-          Manage subscriptions, plans, and workspace settings
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Workspace Management</h2>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
+            Manage subscriptions, plans, and workspace settings
+          </p>
+        </div>
+
+        {/* Settings Toggle */}
+        <div className="flex items-center gap-3 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+          <div className="flex items-center gap-2">
+            <Monitor className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Wide Layout
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={toggleWideLayout}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+              settings.wideLayout
+                ? 'bg-blue-600 dark:bg-blue-500'
+                : 'bg-gray-300 dark:bg-gray-600'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                settings.wideLayout ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
       </div>
 
       {/* Premium Metric Cards */}
