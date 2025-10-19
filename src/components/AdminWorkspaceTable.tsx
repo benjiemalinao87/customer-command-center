@@ -7,6 +7,8 @@
 import { useState, useEffect } from 'react';
 import { Search, Users, Edit3, X } from 'lucide-react';
 import { adminApi } from '../lib/adminApi';
+import { getWorkspaceApiUsage } from '../lib/supabaseAdmin';
+import { supabase } from '../lib/supabase';
 
 interface Workspace {
   id: string;
@@ -45,8 +47,37 @@ export function AdminWorkspaceTable() {
   const loadWorkspaces = async () => {
     try {
       setLoading(true);
-      const response = await adminApi.getWorkspaces();
-      setWorkspaces(response.data || []);
+      const [response, apiUsageData] = await Promise.all([
+        adminApi.getWorkspaces(),
+        getWorkspaceApiUsage()
+      ]);
+      
+      // Fetch subscription data from Supabase to ensure we have the correct status
+      const { data: subscriptionsData } = await supabase
+        .from('workspace_subscriptions')
+        .select('workspace_id, subscription_status, plan_name');
+      
+      // Create a map of workspace subscriptions
+      const subscriptionMap = new Map();
+      subscriptionsData?.forEach((sub: any) => {
+        subscriptionMap.set(sub.workspace_id, {
+          subscription_status: sub.subscription_status,
+          plan_name: sub.plan_name
+        });
+      });
+      
+      // Merge real API usage data and subscription data with workspace data
+      const workspaces = (response.data || []).map((workspace: any) => {
+        const subscription = subscriptionMap.get(workspace.id);
+        return {
+          ...workspace,
+          api_requests_count: apiUsageData.get(workspace.id) || 0,
+          workspace_subscriptions: subscription ? [subscription] : workspace.workspace_subscriptions
+        };
+      });
+      
+      console.log('Sample workspace with subscription:', workspaces[0]);
+      setWorkspaces(workspaces);
     } catch (error) {
       console.error('Error loading workspaces:', error);
     } finally {
@@ -196,6 +227,12 @@ export function AdminWorkspaceTable() {
                 const limits = plan?.limits || {};
                 const apiUsagePercent = ((workspace.api_requests_count || 0) / (workspace.api_limit || 1000)) * 100;
                 const contactsPercent = getUsagePercentage(workspace.contacts_count || 0, limits.contacts || 1000);
+                
+                // Debug logging
+                if (workspace.id === '91462') {
+                  console.log('Workspace 91462 subscription status:', subscription?.subscription_status);
+                  console.log('Subscription object:', subscription);
+                }
 
                 return (
                   <tr
@@ -256,10 +293,12 @@ export function AdminWorkspaceTable() {
                     </td>
                     <td className="px-6 py-4">
                       <span
-                        className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${
+                        className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold border ${
                           subscription?.subscription_status === 'active'
-                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                            : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                            ? 'bg-green-500/10 text-green-400 border-green-500/30'
+                            : subscription?.subscription_status === 'inactive'
+                            ? 'bg-red-500/10 text-red-400 border-red-500/30'
+                            : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
                         }`}
                       >
                         {subscription?.subscription_status || 'active'}

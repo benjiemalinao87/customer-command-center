@@ -412,6 +412,69 @@ export const getActiveSessions = async () => {
 };
 
 /**
+ * Get endpoint analytics from api_requests
+ */
+export const getEndpointAnalytics = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('api_requests')
+      .select('endpoint, method, response_time_ms, status_code')
+      .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+
+    if (error) {
+      console.warn('Error fetching endpoint analytics:', error);
+      return [];
+    }
+
+    // Aggregate by endpoint
+    const endpointMap = new Map<string, {
+      endpoint_path: string;
+      method: string;
+      request_count: number;
+      total_response_time: number;
+      status_codes: Map<number, number>;
+    }>();
+
+    data?.forEach((req) => {
+      const key = `${req.endpoint}-${req.method || 'GET'}`;
+      if (!endpointMap.has(key)) {
+        endpointMap.set(key, {
+          endpoint_path: req.endpoint,
+          method: req.method || 'GET',
+          request_count: 0,
+          total_response_time: 0,
+          status_codes: new Map()
+        });
+      }
+
+      const endpoint = endpointMap.get(key)!;
+      endpoint.request_count++;
+      endpoint.total_response_time += req.response_time_ms || 0;
+      
+      const statusCount = endpoint.status_codes.get(req.status_code) || 0;
+      endpoint.status_codes.set(req.status_code, statusCount + 1);
+    });
+
+    // Convert to array format
+    return Array.from(endpointMap.values())
+      .map(endpoint => ({
+        endpoint_path: endpoint.endpoint_path,
+        method: endpoint.method,
+        request_count: endpoint.request_count,
+        avg_response_time: endpoint.total_response_time / endpoint.request_count,
+        status_codes: Array.from(endpoint.status_codes.entries()).map(([code, count]) => ({
+          code,
+          count
+        }))
+      }))
+      .sort((a, b) => b.request_count - a.request_count);
+  } catch (error) {
+    console.error('Error fetching endpoint analytics:', error);
+    return [];
+  }
+};
+
+/**
  * Helper function to get location from IP (simplified)
  */
 function getLocationFromIP(ip: string): string {
@@ -524,5 +587,107 @@ export const getMostUsedEndpoints = async () => {
   } catch (error) {
     console.error('Error fetching most used endpoints:', error);
     return null;
+  }
+};
+
+/**
+ * Get real workspace API usage data from Supabase
+ */
+export const getWorkspaceApiUsage = async () => {
+  try {
+    console.log('🔵 Fetching real workspace API usage from Supabase...');
+    // Get API requests count per workspace for last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const { data: apiUsage, error: apiError } = await supabase
+      .from('api_requests')
+      .select('workspace_id')
+      .gte('created_at', thirtyDaysAgo.toISOString());
+
+    if (apiError) {
+      console.warn('Error fetching API usage:', apiError);
+      return new Map();
+    }
+
+    // Count requests per workspace
+    const workspaceCounts = new Map<string, number>();
+    apiUsage?.forEach((req) => {
+      if (req.workspace_id) {
+        const count = workspaceCounts.get(req.workspace_id) || 0;
+        workspaceCounts.set(req.workspace_id, count + 1);
+      }
+    });
+
+    console.log(`✅ Workspace API usage loaded: ${workspaceCounts.size} workspaces with API usage`);
+    // Log top 3 workspaces
+    const sorted = Array.from(workspaceCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    sorted.forEach(([id, count]) => console.log(`  Workspace ${id}: ${count} requests`));
+
+    return workspaceCounts;
+  } catch (error) {
+    console.error('Error fetching workspace API usage:', error);
+    return new Map();
+  }
+};
+
+/**
+ * Get real monthly revenue from Supabase
+ */
+export const getRealMonthlyRevenue = async () => {
+  try {
+    console.log('🔵 Fetching real monthly revenue from Supabase...');
+    
+    // Get all active subscriptions
+    const { data: subscriptions, error: subsError } = await supabase
+      .from('workspace_subscriptions')
+      .select('plan_name')
+      .eq('subscription_status', 'active');
+
+    if (subsError) {
+      console.warn('Error fetching subscriptions:', subsError);
+      return 0;
+    }
+
+    // Get all subscription plans with pricing
+    const { data: plans, error: plansError } = await supabase
+      .from('subscription_plans')
+      .select('plan_name, pricing');
+
+    if (plansError) {
+      console.warn('Error fetching plans:', plansError);
+      return 0;
+    }
+
+    // Create a map of plan prices
+    const planPrices = new Map<string, number>();
+    plans?.forEach((plan: any) => {
+      const price = plan.pricing?.monthly_price || 0;
+      planPrices.set(plan.plan_name, parseFloat(price.toString()));
+    });
+
+    // Calculate total revenue
+    let totalRevenue = 0;
+    const planCounts = new Map<string, number>();
+    
+    subscriptions?.forEach((sub: any) => {
+      const price = planPrices.get(sub.plan_name) || 0;
+      totalRevenue += price;
+      planCounts.set(sub.plan_name, (planCounts.get(sub.plan_name) || 0) + 1);
+    });
+
+    // Log breakdown
+    console.log('Revenue breakdown:');
+    planCounts.forEach((count, planName) => {
+      const price = planPrices.get(planName) || 0;
+      const subtotal = count * price;
+      console.log(`  ${count}x ${planName} @ $${price} = $${subtotal}`);
+    });
+
+    console.log(`✅ Total Real Revenue: $${totalRevenue}`);
+    return totalRevenue;
+  } catch (error) {
+    console.error('Error fetching monthly revenue:', error);
+    return 0;
   }
 };

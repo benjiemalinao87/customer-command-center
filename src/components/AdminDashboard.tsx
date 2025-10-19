@@ -19,12 +19,14 @@ import { adminApi } from '../lib/adminApi';
 import { MetricCard } from '../shared/components/ui/MetricCard';
 import { AdminWorkspaceTable } from './AdminWorkspaceTable';
 import { useSettings } from '../shared/components/ui/Settings';
+import { getRealMonthlyRevenue } from '../lib/supabaseAdmin';
 
 export function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
   const [dashboardData, setDashboardData] = useState<any>(null);
+  const [realRevenue, setRealRevenue] = useState<number>(0);
   const settings = useSettings();
 
   const toggleWideLayout = () => {
@@ -47,9 +49,13 @@ export function AdminDashboard() {
       setHasAdminAccess(hasAccess);
 
       if (hasAccess) {
-        // Load dashboard overview
-        const response = await adminApi.getDashboardOverview();
+        // Load dashboard overview and real revenue
+        const [response, revenue] = await Promise.all([
+          adminApi.getDashboardOverview(),
+          getRealMonthlyRevenue()
+        ]);
         setDashboardData(response.data);
+        setRealRevenue(revenue);
       }
     } catch (error: any) {
       console.error('Error loading admin dashboard:', error);
@@ -90,9 +96,7 @@ export function AdminDashboard() {
   }
 
   const { overview } = dashboardData || {};
-  const totalRevenue = (overview?.planDistribution?.pro || 0) * 99 +
-                       (overview?.planDistribution?.advanced || 0) * 199 +
-                       (overview?.planDistribution?.developer || 0) * 399;
+  const totalRevenue = realRevenue || 0;
 
   return (
     <div className="space-y-6">
@@ -143,7 +147,7 @@ export function AdminDashboard() {
         <MetricCard
           title="Active Subscriptions"
           value={overview?.activeSubscriptions || 0}
-          subtitle="Paying customers"
+          subtitle="Active subscriptions"
           icon={TrendingUp}
           iconColor="text-green-600"
         />

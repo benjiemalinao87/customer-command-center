@@ -7,6 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import { Activity, TrendingUp, Server, AlertTriangle, BarChart2, PieChart, RefreshCw, X, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { adminApi } from '../../../lib/adminApi';
+import { getEndpointAnalytics } from '../../../lib/supabaseAdmin';
 
 interface WorkspaceData {
   id: string;
@@ -78,10 +79,11 @@ export function ApiMonitoring() {
     try {
       setLoading(true);
 
-      const [summaryResponse, workspacesResponse, violationsResponse] = await Promise.all([
+      const [summaryResponse, workspacesResponse, violationsResponse, endpointsData] = await Promise.all([
         adminApi.getApiRequestSummary(timeRange),
         adminApi.getWorkspaces(),
-        adminApi.getRateLimitViolations(null, timeRange)
+        adminApi.getRateLimitViolations(null, timeRange),
+        getEndpointAnalytics()
       ]);
 
       setData({
@@ -89,6 +91,9 @@ export function ApiMonitoring() {
         workspaces: workspacesResponse.data || [],
         violations: violationsResponse.data || []
       });
+      
+      // Load endpoint analytics from Supabase
+      setEndpointUsage(endpointsData);
     } catch (error) {
       console.error('Error loading API monitoring data:', error);
       // Use mock data
@@ -556,11 +561,96 @@ export function ApiMonitoring() {
 
           {/* Endpoint Analytics Tab */}
           {activeTab === 'endpoint' && (
-            <div className="text-center py-12">
-              <BarChart2 className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-              <p className="text-gray-400">
-                Select a workspace from the "Workspace Usage" tab to view detailed endpoint analytics
-              </p>
+            <div>
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-white mb-1">Endpoint Analytics</h3>
+                <p className="text-sm text-gray-400">
+                  API endpoint usage and performance across all workspaces
+                </p>
+              </div>
+
+              {endpointUsage.length === 0 ? (
+                <div className="text-center py-12">
+                  <BarChart2 className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                  <p className="text-gray-400">
+                    No endpoint data available for the selected time range
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-700/50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">
+                          Endpoint
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">
+                          Method
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">
+                          Requests
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase">
+                          Avg Response Time
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">
+                          Status
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-700">
+                      {endpointUsage.map((endpoint, index) => (
+                        <tr key={index} className="hover:bg-gray-700/30 transition-colors">
+                          <td className="px-4 py-4">
+                            <code className="text-sm text-blue-400 font-mono">
+                              {endpoint.endpoint_path}
+                            </code>
+                          </td>
+                          <td className="px-4 py-4">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/30">
+                              {endpoint.method || 'GET'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-right">
+                            <span className="text-sm font-medium text-white">
+                              {formatNumber(endpoint.request_count)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-right">
+                            <span className="text-sm text-gray-300">
+                              {Math.round(endpoint.avg_response_time)}ms
+                            </span>
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="flex gap-1">
+                              {endpoint.status_codes?.map((status, idx) => (
+                                <span
+                                  key={idx}
+                                  className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                    status.code < 300
+                                      ? 'bg-green-500/10 text-green-400'
+                                      : status.code < 400
+                                      ? 'bg-blue-500/10 text-blue-400'
+                                      : status.code < 500
+                                      ? 'bg-orange-500/10 text-orange-400'
+                                      : 'bg-red-500/10 text-red-400'
+                                  }`}
+                                >
+                                  {status.code}: {status.count}
+                                </span>
+                              )) || (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-500/10 text-green-400">
+                                  200: {endpoint.request_count}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
