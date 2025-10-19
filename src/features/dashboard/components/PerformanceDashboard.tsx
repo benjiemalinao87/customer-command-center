@@ -17,6 +17,15 @@ import { MultiLineChart } from '../../../shared/components/charts';
 import { DonutChart } from '../../../shared/components/charts';
 import { BarChart } from '../../../shared/components/charts';
 import { adminApi } from '../../../lib/adminApi';
+import {
+  getTotalUsers,
+  getUserRoleBreakdown,
+  getApiRequestsCount,
+  getTotalLoginsToday,
+  getPlatformUsageTrends,
+  getGeographicDistribution,
+  getMostUsedEndpoints
+} from '../../../lib/supabaseAdmin';
 
 interface PerformanceDashboardProps {
   dateRange: { from: string; to: string };
@@ -25,6 +34,7 @@ interface PerformanceDashboardProps {
 export function PerformanceDashboard({ dateRange }: PerformanceDashboardProps) {
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
+  const [supabaseMetrics, setSupabaseMetrics] = useState<any>(null);
 
   useEffect(() => {
     loadData();
@@ -33,30 +43,61 @@ export function PerformanceDashboard({ dateRange }: PerformanceDashboardProps) {
   const loadData = async () => {
     setLoading(true);
     try {
-      // Try to load admin dashboard data
-      console.log('🔵 Fetching dashboard data from:', import.meta.env.VITE_ADMIN_API_URL);
-      const response = await adminApi.getDashboardOverview();
-      console.log('✅ Dashboard API Response:', response);
-      setDashboardData(response.data);
+      // Fetch data from both backend API and Supabase in parallel
+      console.log('🔵 Fetching dashboard data from backend and Supabase...');
+
+      const [backendResponse, totalUsers, roleBreakdown, apiRequests, totalLogins, usageTrends, geoDistribution, topEndpoints] = await Promise.all([
+        adminApi.getDashboardOverview().catch(err => {
+          console.warn('Backend API failed:', err);
+          return null;
+        }),
+        getTotalUsers(),
+        getUserRoleBreakdown(),
+        getApiRequestsCount(),
+        getTotalLoginsToday(),
+        getPlatformUsageTrends(7),
+        getGeographicDistribution(),
+        getMostUsedEndpoints()
+      ]);
+
+      console.log('✅ Backend Response:', backendResponse);
+      console.log('✅ Supabase Metrics:', { totalUsers, roleBreakdown, apiRequests, totalLogins });
+
+      // Merge backend data with Supabase metrics
+      const mergedData = {
+        overview: {
+          // From backend
+          totalWorkspaces: backendResponse?.data?.overview?.totalWorkspaces || 0,
+          activeSubscriptions: backendResponse?.data?.overview?.activeSubscriptions || 0,
+          planDistribution: backendResponse?.data?.overview?.planDistribution || {},
+          // From Supabase
+          totalUsers: totalUsers,
+          totalAdmins: roleBreakdown.admins,
+          totalAgents: roleBreakdown.agents,
+          apiRequests: apiRequests,
+          totalLogins: totalLogins
+        },
+        usageTrends,
+        geoDistribution,
+        topEndpoints
+      };
+
+      setDashboardData(mergedData);
+      setSupabaseMetrics({ totalUsers, roleBreakdown, apiRequests, totalLogins });
     } catch (error) {
       console.error('❌ Error loading dashboard data:', error);
       console.error('❌ Error details:', error instanceof Error ? error.message : error);
-      // Use mock data if API fails
+      // Use minimal fallback data
       setDashboardData({
         overview: {
-          totalWorkspaces: 24,
-          activeSubscriptions: 18,
-          totalUsers: 156,
-          totalAdmins: 12,
-          totalAgents: 144,
-          apiRequests: 45230,
-          totalLogins: 892,
-          planDistribution: {
-            free: 6,
-            pro: 8,
-            advanced: 7,
-            developer: 3
-          }
+          totalWorkspaces: 0,
+          activeSubscriptions: 0,
+          totalUsers: 0,
+          totalAdmins: 0,
+          totalAgents: 0,
+          apiRequests: 0,
+          totalLogins: 0,
+          planDistribution: {}
         }
       });
     } finally {
@@ -64,56 +105,40 @@ export function PerformanceDashboard({ dateRange }: PerformanceDashboardProps) {
     }
   };
 
-  // Mock data for API usage trends - 7 days
-  const usageLabels = ['Jan 8', 'Jan 9', 'Jan 10', 'Jan 11', 'Jan 12', 'Jan 13', 'Jan 14'];
-  const apiRequestsData = [5200, 6100, 7500, 5800, 6900, 6200, 7300];
-  const activeUsersData = [120, 135, 142, 128, 145, 138, 156];
-  const newSignupsData = [8, 12, 15, 10, 18, 14, 20];
-
-  const usageTrendsSeries = [
+  // Use real data from Supabase or fallback to empty data
+  const usageTrends = dashboardData?.usageTrends;
+  const usageTrendsSeries = usageTrends ? [
     {
       name: 'API Requests',
-      data: usageLabels.map((label, i) => ({
+      data: usageTrends.labels.map((label: string, i: number) => ({
         label,
-        value: apiRequestsData[i]
+        value: usageTrends.apiRequests[i]
       })),
       color: '#3b82f6' // Blue
     },
     {
       name: 'Active Users',
-      data: usageLabels.map((label, i) => ({
+      data: usageTrends.labels.map((label: string, i: number) => ({
         label,
-        value: activeUsersData[i]
+        value: usageTrends.activeUsers[i]
       })),
       color: '#10b981' // Green
     },
     {
       name: 'New Signups',
-      data: usageLabels.map((label, i) => ({
+      data: usageTrends.labels.map((label: string, i: number) => ({
         label,
-        value: newSignupsData[i]
+        value: usageTrends.newSignups[i]
       })),
       color: '#8b5cf6' // Purple
     }
-  ];
+  ] : [];
 
-  // Top API Endpoints (most used)
-  const topEndpoints = [
-    { label: '/api/sms/send', value: 12450, color: '#ec4899' },
-    { label: '/api/livechat/messages', value: 9830, color: '#8b5cf6' },
-    { label: '/api/triggers/execute', value: 7620, color: '#3b82f6' },
-    { label: '/api/billing/usage', value: 5340, color: '#10b981' },
-    { label: '/api/integrations/sync', value: 4210, color: '#f59e0b' }
-  ];
+  // Use real endpoint data from Supabase or show message
+  const topEndpoints = dashboardData?.topEndpoints || [];
 
-  // Geographic distribution of requests
-  const locationData = [
-    { label: 'United States', value: 45, color: '#3b82f6' },
-    { label: 'Canada', value: 18, color: '#10b981' },
-    { label: 'United Kingdom', value: 15, color: '#8b5cf6' },
-    { label: 'Australia', value: 12, color: '#f59e0b' },
-    { label: 'Others', value: 10, color: '#6b7280' }
-  ];
+  // Use real geographic data from Supabase
+  const locationData = dashboardData?.geoDistribution || [];
 
   // Subscription plan distribution
   const planData = dashboardData?.overview?.planDistribution
@@ -240,8 +265,8 @@ export function PerformanceDashboard({ dateRange }: PerformanceDashboardProps) {
           </div>
 
           <div className="space-y-4">
-            {topEndpoints.map((endpoint, index) => (
-              <div key={endpoint.label}>
+            {topEndpoints.length > 0 ? topEndpoints.map((endpoint: any, index: number) => (
+              <div key={endpoint.label || index}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-gray-700 dark:text-gray-300 font-mono">
                     {endpoint.label}
@@ -260,7 +285,11 @@ export function PerformanceDashboard({ dateRange }: PerformanceDashboardProps) {
                   />
                 </div>
               </div>
-            ))}
+            )) : (
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                No endpoint data available
+              </p>
+            )}
           </div>
         </div>
 
