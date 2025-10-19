@@ -34,10 +34,13 @@ export function PerformanceDashboard({ dateRange }: PerformanceDashboardProps) {
     setLoading(true);
     try {
       // Try to load admin dashboard data
+      console.log('🔵 Fetching dashboard data from:', import.meta.env.VITE_ADMIN_API_URL);
       const response = await adminApi.getDashboardOverview();
+      console.log('✅ Dashboard API Response:', response);
       setDashboardData(response.data);
     } catch (error) {
-      console.error('Error loading dashboard data:', error);
+      console.error('❌ Error loading dashboard data:', error);
+      console.error('❌ Error details:', error instanceof Error ? error.message : error);
       // Use mock data if API fails
       setDashboardData({
         overview: {

@@ -32,10 +32,13 @@ const makeAdminRequest = async (endpoint: string, options: RequestInit = {}) => 
   const token = await getAuthToken();
 
   if (!token) {
+    console.error('🔴 No auth token found - user may not be logged in');
     throw new Error('Authentication required. Please log in.');
   }
 
   const url = `${ADMIN_API_BASE_URL}${endpoint}`;
+  console.log('🔵 Making admin API request:', url);
+  console.log('🔑 Token exists:', !!token, 'Length:', token?.length);
 
   const response = await fetch(url, {
     ...options,
@@ -46,12 +49,17 @@ const makeAdminRequest = async (endpoint: string, options: RequestInit = {}) => 
     },
   });
 
+  console.log('📡 Response status:', response.status, response.statusText);
+
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
+    console.error('❌ API Error:', errorData);
     throw new Error(errorData.error || `API request failed: ${response.statusText}`);
   }
 
-  return response.json();
+  const data = await response.json();
+  console.log('✅ API Success:', data);
+  return data;
 };
 
 /**
