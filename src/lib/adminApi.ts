@@ -37,8 +37,6 @@ const makeAdminRequest = async (endpoint: string, options: RequestInit = {}) => 
   }
 
   const url = `${ADMIN_API_BASE_URL}${endpoint}`;
-  console.log('🔵 Making admin API request:', url);
-  console.log('🔑 Token exists:', !!token, 'Length:', token?.length);
 
   const response = await fetch(url, {
     ...options,
@@ -49,8 +47,6 @@ const makeAdminRequest = async (endpoint: string, options: RequestInit = {}) => 
     },
   });
 
-  console.log('📡 Response status:', response.status, response.statusText);
-
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     console.error('❌ API Error:', errorData);
@@ -58,7 +54,6 @@ const makeAdminRequest = async (endpoint: string, options: RequestInit = {}) => 
   }
 
   const data = await response.json();
-  console.log('✅ API Success:', data);
   return data;
 };
 

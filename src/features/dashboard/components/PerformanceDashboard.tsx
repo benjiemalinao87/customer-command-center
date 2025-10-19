@@ -43,8 +43,6 @@ export function PerformanceDashboard({ dateRange }: PerformanceDashboardProps) {
     setLoading(true);
     try {
       // Fetch data from both backend API and Supabase in parallel
-      console.log('🔵 Fetching dashboard data from backend and Supabase...');
-
       const [backendResponse, totalUsers, roleBreakdown, apiRequests, totalLogins, usageTrends, geoDistribution, topEndpoints, topCompanies] = await Promise.all([
         adminApi.getDashboardOverview().catch(err => {
           console.warn('Backend API failed:', err);
@@ -59,9 +57,6 @@ export function PerformanceDashboard({ dateRange }: PerformanceDashboardProps) {
         getMostUsedEndpoints(),
         getTopCompaniesByUsage()
       ]);
-
-      console.log('✅ Backend Response:', backendResponse);
-      console.log('✅ Supabase Metrics:', { totalUsers, roleBreakdown, apiRequests, totalLogins });
 
       // Merge backend data with Supabase metrics
       const mergedData = {

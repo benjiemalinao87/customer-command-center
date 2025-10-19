@@ -595,7 +595,6 @@ export const getMostUsedEndpoints = async () => {
  */
 export const getWorkspaceApiUsage = async () => {
   try {
-    console.log('🔵 Fetching real workspace API usage from Supabase...');
     // Get API requests count per workspace for last 30 days
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -619,11 +618,6 @@ export const getWorkspaceApiUsage = async () => {
       }
     });
 
-    console.log(`✅ Workspace API usage loaded: ${workspaceCounts.size} workspaces with API usage`);
-    // Log top 3 workspaces
-    const sorted = Array.from(workspaceCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3);
-    sorted.forEach(([id, count]) => console.log(`  Workspace ${id}: ${count} requests`));
-
     return workspaceCounts;
   } catch (error) {
     console.error('Error fetching workspace API usage:', error);
@@ -636,8 +630,6 @@ export const getWorkspaceApiUsage = async () => {
  */
 export const getRealMonthlyRevenue = async () => {
   try {
-    console.log('🔵 Fetching real monthly revenue from Supabase...');
-    
     // Get all active subscriptions
     const { data: subscriptions, error: subsError } = await supabase
       .from('workspace_subscriptions')
@@ -668,23 +660,12 @@ export const getRealMonthlyRevenue = async () => {
 
     // Calculate total revenue
     let totalRevenue = 0;
-    const planCounts = new Map<string, number>();
     
     subscriptions?.forEach((sub: any) => {
       const price = planPrices.get(sub.plan_name) || 0;
       totalRevenue += price;
-      planCounts.set(sub.plan_name, (planCounts.get(sub.plan_name) || 0) + 1);
     });
 
-    // Log breakdown
-    console.log('Revenue breakdown:');
-    planCounts.forEach((count, planName) => {
-      const price = planPrices.get(planName) || 0;
-      const subtotal = count * price;
-      console.log(`  ${count}x ${planName} @ $${price} = $${subtotal}`);
-    });
-
-    console.log(`✅ Total Real Revenue: $${totalRevenue}`);
     return totalRevenue;
   } catch (error) {
     console.error('Error fetching monthly revenue:', error);

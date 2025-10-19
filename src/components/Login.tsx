@@ -47,13 +47,6 @@ export function Login({ onLoginSuccess }: LoginProps) {
       <div className="max-w-md w-full space-y-8">
         {/* Header */}
         <div className="text-center">
-          <div className="flex items-center justify-center mb-6">
-            <img
-              src="https://channelautomation.com/wp-content/uploads/2022/11/logofooter2.png"
-              alt="Channel Automation"
-              className="h-12 w-auto object-contain"
-            />
-          </div>
           <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
             Customer Connect Command Center
           </h2>
@@ -145,12 +138,6 @@ export function Login({ onLoginSuccess }: LoginProps) {
           </div>
         </div>
 
-        {/* Additional Info */}
-        <div className="text-center">
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Need help? Contact support at support@channelautomation.com
-          </p>
-        </div>
       </div>
     </div>
   );

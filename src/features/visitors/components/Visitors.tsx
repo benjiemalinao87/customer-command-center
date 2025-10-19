@@ -26,21 +26,19 @@ export function Visitors() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Load real session data
-  const loadSessions = async () => {
-    try {
-      console.log('🔵 Fetching active sessions from Supabase...');
-      const realSessions = await getActiveSessions();
-      console.log('✅ Real sessions loaded:', realSessions.length);
-      setSessions(realSessions);
-    } catch (error) {
-      console.error('❌ Error loading sessions:', error);
-      // Fallback to empty array if error
-      setSessions([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+      // Load real session data
+      const loadSessions = async () => {
+        try {
+          const realSessions = await getActiveSessions();
+          setSessions(realSessions);
+        } catch (error) {
+          console.error('❌ Error loading sessions:', error);
+          // Fallback to empty array if error
+          setSessions([]);
+        } finally {
+          setLoading(false);
+        }
+      };
 
   useEffect(() => {
     loadSessions();

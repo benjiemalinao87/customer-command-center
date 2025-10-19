@@ -76,7 +76,6 @@ export function AdminWorkspaceTable() {
         };
       });
       
-      console.log('Sample workspace with subscription:', workspaces[0]);
       setWorkspaces(workspaces);
     } catch (error) {
       console.error('Error loading workspaces:', error);
@@ -228,11 +227,6 @@ export function AdminWorkspaceTable() {
                 const apiUsagePercent = ((workspace.api_requests_count || 0) / (workspace.api_limit || 1000)) * 100;
                 const contactsPercent = getUsagePercentage(workspace.contacts_count || 0, limits.contacts || 1000);
                 
-                // Debug logging
-                if (workspace.id === '91462') {
-                  console.log('Workspace 91462 subscription status:', subscription?.subscription_status);
-                  console.log('Subscription object:', subscription);
-                }
 
                 return (
                   <tr
