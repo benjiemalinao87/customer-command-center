@@ -1,16 +1,22 @@
 import { useState, useEffect } from 'react';
-import { BarChart3, Calendar, Moon, Sun, Users } from 'lucide-react';
+import { BarChart3, Calendar, Moon, Sun, Users, Shield, LogOut, Activity, UserCheck, BarChart2, FileText, Database } from 'lucide-react';
 import { PerformanceDashboard } from './features/dashboard';
 import { Visitors } from './features/visitors';
-import { agentApi } from './lib/api';
-import type { Agent } from './shared/types';
+import { UserActivity } from './features/user-activity/components/UserActivity';
+import { UserDetails } from './features/user-details/components/UserDetails';
+import { ApiMonitoring } from './features/api-monitoring/components/ApiMonitoring';
+import { ActivityLogs } from './features/activity-logs/components/ActivityLogs';
+import { CacheSystem } from './features/cache-system/components/CacheSystem';
+import { AdminDashboard } from './components/AdminDashboard';
+import { Login } from './components/Login';
+import { supabase, getCurrentUser } from './lib/supabase';
 
-type View = 'dashboard' | 'visitors';
+type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'cache-system' | 'admin';
 
 function App() {
   const [currentView, setCurrentView] = useState<View>('dashboard');
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [selectedAgentId, setSelectedAgentId] = useState<string | undefined>();
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode');
     if (saved !== null) {
@@ -24,7 +30,17 @@ function App() {
   });
 
   useEffect(() => {
-    loadAgents();
+    checkAuth();
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session);
+      setUserEmail(session?.user?.email || null);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -37,23 +53,51 @@ function App() {
     localStorage.setItem('darkMode', String(darkMode));
   }, [darkMode]);
 
+  const checkAuth = async () => {
+    try {
+      const user = await getCurrentUser();
+      setIsAuthenticated(!!user);
+      setUserEmail(user?.email || null);
+    } catch (error) {
+      console.error('Auth check failed:', error);
+      setIsAuthenticated(false);
+    }
+  };
+
+  const handleLoginSuccess = () => {
+    checkAuth();
+  };
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setIsAuthenticated(false);
+      setUserEmail(null);
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
+
   const toggleDarkMode = () => {
     setDarkMode(prev => !prev);
   };
 
-  const loadAgents = async () => {
-    try {
-      const data = await agentApi.getAll();
-      setAgents(data);
-      if (data.length > 0 && !selectedAgentId) {
-        setSelectedAgentId(data[0].id);
-      }
-    } catch (error) {
-      console.error('Error loading agents:', error);
-    }
-  };
+  // Show loading state while checking auth
+  if (isAuthenticated === null) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 dark:border-blue-400"></div>
+          <p className="text-gray-600 dark:text-gray-400 font-medium">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
-  const selectedAgent = agents.find(a => a.id === selectedAgentId);
+  // Show login screen if not authenticated
+  if (!isAuthenticated) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
 
   return (
     <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900 overflow-hidden">
@@ -63,15 +107,30 @@ function App() {
           <div className="flex justify-between h-16">
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Tippen</h1>
+                <img
+                  src="https://channelautomation.com/wp-content/uploads/2022/11/logofooter2.png"
+                  alt="Channel Automation"
+                  className="h-8 w-auto object-contain"
+                />
               </div>
             </div>
 
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+              {/* User Email Display */}
+              {userEmail && (
+                <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                  <Shield className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {userEmail}
+                  </span>
+                </div>
+              )}
+
+              {/* Premium Segmented Control Navigation */}
+              <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1 overflow-x-auto max-w-2xl">
                 <button
                   onClick={() => setCurrentView('dashboard')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
                     currentView === 'dashboard'
                       ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
                       : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
@@ -81,17 +140,93 @@ function App() {
                   Dashboard
                 </button>
                 <button
+                  onClick={() => setCurrentView('user-activity')}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
+                    currentView === 'user-activity'
+                      ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
+                  }`}
+                >
+                  <Activity className="w-4 h-4" />
+                  Activity
+                </button>
+                <button
+                  onClick={() => setCurrentView('user-details')}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
+                    currentView === 'user-details'
+                      ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
+                  }`}
+                >
+                  <UserCheck className="w-4 h-4" />
+                  Users
+                </button>
+                <button
+                  onClick={() => setCurrentView('api-monitoring')}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
+                    currentView === 'api-monitoring'
+                      ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
+                  }`}
+                >
+                  <BarChart2 className="w-4 h-4" />
+                  API
+                </button>
+                <button
                   onClick={() => setCurrentView('visitors')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
                     currentView === 'visitors'
                       ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
                       : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
                   }`}
                 >
                   <Users className="w-4 h-4" />
-                  Visitors
+                  Logins
+                </button>
+                <button
+                  onClick={() => setCurrentView('activity-logs')}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
+                    currentView === 'activity-logs'
+                      ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
+                  }`}
+                >
+                  <FileText className="w-4 h-4" />
+                  Logs
+                </button>
+                <button
+                  onClick={() => setCurrentView('cache-system')}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
+                    currentView === 'cache-system'
+                      ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
+                  }`}
+                >
+                  <Database className="w-4 h-4" />
+                  Cache
+                </button>
+                <button
+                  onClick={() => setCurrentView('admin')}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
+                    currentView === 'admin'
+                      ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
+                  }`}
+                >
+                  <Shield className="w-4 h-4" />
+                  Admin
                 </button>
               </div>
+
+              {/* Logout Button */}
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors"
+                title="Sign out"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline">Sign Out</span>
+              </button>
             </div>
           </div>
         </div>
@@ -99,46 +234,69 @@ function App() {
 
       {/* Scrollable Content Area */}
       <main className="flex-1 overflow-y-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {currentView === 'dashboard' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Performance Metrics</h2>
-                <p className="text-gray-600 dark:text-gray-400 mt-1">
-                  {selectedAgent ? `Viewing metrics for ${selectedAgent.name}` : 'Viewing metrics for all agents'}
-                </p>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 transition-all duration-300">
+          {currentView === 'dashboard' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Platform Overview</h2>
+                  <p className="text-gray-600 dark:text-gray-400 mt-1">
+                    SaaS metrics and system performance
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+                  <select
+                    defaultValue="14"
+                    onChange={(e) => {
+                      const days = parseInt(e.target.value);
+                      setDateRange({
+                        from: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
+                        to: new Date().toISOString()
+                      });
+                    }}
+                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  >
+                    <option value="7">Last 7 days</option>
+                    <option value="14">Last 14 days</option>
+                  </select>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-                <select
-                  defaultValue="14"
-                  onChange={(e) => {
-                    const days = parseInt(e.target.value);
-                    setDateRange({
-                      from: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
-                      to: new Date().toISOString()
-                    });
-                  }}
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                >
-                  <option value="7">Last 7 days</option>
-                  <option value="14">Last 14 days</option>
-                </select>
-              </div>
+              <PerformanceDashboard
+                dateRange={dateRange}
+              />
             </div>
+          )}
 
-            <PerformanceDashboard
-              selectedAgentId={selectedAgentId}
-              dateRange={dateRange}
-            />
-          </div>
-        )}
+          {currentView === 'user-activity' && (
+            <UserActivity />
+          )}
 
-        {currentView === 'visitors' && (
-          <Visitors />
-        )}
+          {currentView === 'user-details' && (
+            <UserDetails />
+          )}
+
+          {currentView === 'api-monitoring' && (
+            <ApiMonitoring />
+          )}
+
+          {currentView === 'visitors' && (
+            <Visitors />
+          )}
+
+          {currentView === 'activity-logs' && (
+            <ActivityLogs />
+          )}
+
+          {currentView === 'cache-system' && (
+            <CacheSystem />
+          )}
+
+          {currentView === 'admin' && (
+            <AdminDashboard />
+          )}
         </div>
       </main>
 
