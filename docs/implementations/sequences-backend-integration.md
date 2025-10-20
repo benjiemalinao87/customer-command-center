@@ -38,86 +38,216 @@
 
 ## 3. User Flow
 
-```mermaid
-flowchart LR
-    A(User opens Sequences page) --> B(Taps "+ Sequence")
-    B --> C(Fills name & steps)
-    C --> D(Clicks Save)
-    D --> E(POST /sequences)
-    E --> F[Supabase inserts\n sequence + steps]
-    F --> G(Enroll contacts?)
-    G -->|Yes| H(POST /sequences/:id/enroll)
-    H --> I[scheduleTriggerJobs()]
-    I --> J(Trigger.dev until-message-job)
-    J --> K(Twilio SMS)
-    K --> L(Contact receives msg)
 ```
-
-ASCII equivalent:
-```
-User -> [+ Sequence] -> Fills Form -> [Save]
-        \-> POST /sequences -> Supabase rows
-        \-> (optional) Enroll API -> Trigger.dev jobs -> Twilio -> Phone
+┌──────────────────┐      ┌─────────────────┐      ┌──────────────────┐
+│ User opens       │      │ Taps            │      │ Fills name &     │
+│ Sequences page   ├─────►│ "+ Sequence"    ├─────►│ steps            │
+└──────────────────┘      └─────────────────┘      └────────┬─────────┘
+                                                             │
+                                                             ▼
+                                                    ┌──────────────────┐
+                                                    │ Clicks Save      │
+                                                    └────────┬─────────┘
+                                                             │
+                                                             ▼
+                                                    ┌──────────────────┐
+                                                    │ POST /sequences  │
+                                                    └────────┬─────────┘
+                                                             │
+                                                             ▼
+                                                    ┌──────────────────┐
+                                                    │ Supabase inserts │
+                                                    │ - sequences      │
+                                                    │ - sequence_steps │
+                                                    └────────┬─────────┘
+                                                             │
+                                                             ▼
+                                                    ┌──────────────────┐
+                                                    │ Enroll contacts? │
+                                                    └─────┬──────┬─────┘
+                                                          │      │
+                                                      Yes │      │ No
+                                                          │      │
+                                    ┌─────────────────────▼──┐   │
+                                    │ POST /sequences/       │   │
+                                    │ :id/enroll             │   │
+                                    └─────────┬──────────────┘   │
+                                              │                  │
+                                              ▼                  │
+                                    ┌─────────────────────┐      │
+                                    │ scheduleTrigger     │      │
+                                    │ Jobs()              │      │
+                                    └─────────┬───────────┘      │
+                                              │                  │
+                                              ▼                  │
+                                    ┌─────────────────────┐      │
+                                    │ Trigger.dev         │      │
+                                    │ until-message-job   │      │
+                                    │ (scheduled)         │      │
+                                    └─────────┬───────────┘      │
+                                              │                  │
+                                              ▼                  │
+                                    ┌─────────────────────┐      │
+                                    │ Twilio SMS API      │      │
+                                    │ (sends message)     │      │
+                                    └─────────┬───────────┘      │
+                                              │                  │
+                                              ▼                  │
+                                    ┌─────────────────────┐      │
+                                    │ Contact receives    │      │
+                                    │ SMS message         │      │
+                                    └─────────────────────┘      │
+                                                                 │
+                                                                 ▼
+                                                    ┌──────────────────┐
+                                                    │ Sequence saved   │
+                                                    │ (no enrollment)  │
+                                                    └──────────────────┘
 ```
 
 ### High-Level Architecture
 
-```mermaid
-graph TD
-  subgraph Browser
-    UI["Sequence Builder UI"]
-  end
-
-  subgraph "Node.js Express API (Railway)"
-    API[/REST Endpoints/]
-  end
-
-  subgraph "Supabase Postgres + RLS"
-    Tables[("sequences\nsequence_steps\nsequence_enrollments\nscheduled_sms_jobs")]
-  end
-
-  subgraph "Trigger.dev Cloud"
-    UntilJob["until-message-job"]
-  end
-
-  Twilio{{"Twilio SMS Gateway"}}
-  Contact["Recipient Handset"]
-
-  UI -->|"JSON / HTTPS"| API
-  API -->|"insert / update"| Tables
-  API -->|"trigger job"| UntilJob
-  UntilJob -->|"status updates"| Tables
-  UntilJob -->|"send SMS"| Twilio
-  Twilio --> Contact
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│                             BROWSER                                   │
+│                                                                       │
+│                    ┌─────────────────────────┐                       │
+│                    │  Sequence Builder UI    │                       │
+│                    │  (React Components)     │                       │
+│                    └────────────┬────────────┘                       │
+└─────────────────────────────────┼──────────────────────────────────────┘
+                                  │
+                                  │ JSON / HTTPS
+                                  │ (REST API calls)
+                                  │
+                                  ▼
+┌───────────────────────────────────────────────────────────────────────┐
+│                   Node.js Express API (Railway)                       │
+│                                                                       │
+│                    ┌─────────────────────────┐                       │
+│                    │   REST Endpoints        │                       │
+│                    │   - POST /sequences     │                       │
+│                    │   - POST /enroll        │                       │
+│                    │   - GET /sequences/:id  │                       │
+│                    └──────┬──────────────┬───┘                       │
+└───────────────────────────┼──────────────┼───────────────────────────┘
+                            │              │
+                    insert/ │              │ trigger job
+                    update  │              │
+                            │              │
+                            ▼              ▼
+┌────────────────────────────────┐  ┌──────────────────────────────┐
+│  Supabase Postgres + RLS       │  │   Trigger.dev Cloud          │
+│                                │  │                              │
+│  ┌──────────────────────────┐ │  │  ┌────────────────────────┐  │
+│  │ Tables:                  │ │  │  │  until-message-job     │  │
+│  │ • sequences              │ │  │  │  (scheduled tasks)     │  │
+│  │ • sequence_steps         │◄┼──┼──┤                        │  │
+│  │ • sequence_enrollments   │ │  │  │  - wait.until()        │  │
+│  │ • scheduled_sms_jobs     │ │  │  │  - retry logic         │  │
+│  └──────────────────────────┘ │  │  └──────────┬─────────────┘  │
+│                                │  │             │                │
+└────────────────────────────────┘  └─────────────┼────────────────┘
+                                                  │
+                                                  │ send SMS
+                                                  │
+                                                  ▼
+                                    ┌──────────────────────────┐
+                                    │  Twilio SMS Gateway      │
+                                    │                          │
+                                    │  - Message delivery      │
+                                    │  - Status callbacks      │
+                                    └──────────┬───────────────┘
+                                               │
+                                               │ SMS delivered
+                                               │
+                                               ▼
+                                    ┌──────────────────────────┐
+                                    │  Recipient Handset       │
+                                    │  (Contact)               │
+                                    └──────────────────────────┘
 ```
 
 ---
 
 ## 4. Front-end ⇄ Back-end Flow
-```mermaid
-sequenceDiagram
-    participant FE as React SequenceBuilder
-    participant API as Express /sequences routes
-    participant DB as Supabase Postgres
-    participant TG as Trigger.dev Task
-    participant TW as Twilio
 
-    FE->>API: POST /sequences {name, steps[]}
-    API->>DB: insert sequences, sequence_steps (RLS by workspace)
-    API-->>FE: 200 {sequenceId}
-
-    FE->>API: POST /sequences/:id/enroll {contactIds[]}
-    API->>DB: insert sequence_enrollments, scheduled_sms_jobs
-    API->>TG: client.trigger('until-message-job', payload)
-    TG->>TW: Send SMS at scheduled time
-    TW-->>TG: delivery status
-    TG->>DB: update scheduled_sms_jobs (delivered|failed)
-    DB-->>FE: realtime channel pushes status (optional future)
 ```
-
-ASCII:
-```
-FE -> API -> DB (rows) -> TG (job) -> TW (SMS) -> TG -> DB
+┌──────────────────┐  ┌────────────────┐  ┌──────────────┐  ┌──────────────┐  ┌────────┐
+│ React Sequence   │  │ Express        │  │ Supabase     │  │ Trigger.dev  │  │ Twilio │
+│ Builder (FE)     │  │ /sequences     │  │ Postgres     │  │ Task         │  │        │
+└────────┬─────────┘  └───────┬────────┘  └──────┬───────┘  └──────┬───────┘  └───┬────┘
+         │                    │                   │                 │              │
+         │ POST /sequences    │                   │                 │              │
+         │ {                  │                   │                 │              │
+         │   name,            │                   │                 │              │
+         │   steps[]          │                   │                 │              │
+         │ }                  │                   │                 │              │
+         ├───────────────────►│                   │                 │              │
+         │                    │                   │                 │              │
+         │                    │ insert sequences, │                 │              │
+         │                    │ sequence_steps    │                 │              │
+         │                    │ (RLS by workspace)│                 │              │
+         │                    ├──────────────────►│                 │              │
+         │                    │                   │                 │              │
+         │                    │ insert success    │                 │              │
+         │                    │◄──────────────────┤                 │              │
+         │                    │                   │                 │              │
+         │ 200                │                   │                 │              │
+         │ {sequenceId}       │                   │                 │              │
+         │◄───────────────────┤                   │                 │              │
+         │                    │                   │                 │              │
+         │                    │                   │                 │              │
+         │ POST /sequences/   │                   │                 │              │
+         │ :id/enroll         │                   │                 │              │
+         │ {contactIds[]}     │                   │                 │              │
+         ├───────────────────►│                   │                 │              │
+         │                    │                   │                 │              │
+         │                    │ insert            │                 │              │
+         │                    │ sequence_         │                 │              │
+         │                    │ enrollments,      │                 │              │
+         │                    │ scheduled_sms_    │                 │              │
+         │                    │ jobs              │                 │              │
+         │                    ├──────────────────►│                 │              │
+         │                    │                   │                 │              │
+         │                    │ insert success    │                 │              │
+         │                    │◄──────────────────┤                 │              │
+         │                    │                   │                 │              │
+         │                    │ client.trigger(   │                 │              │
+         │                    │ 'until-message-   │                 │              │
+         │                    │ job', payload)    │                 │              │
+         │                    ├─────────────────────────────────────►              │
+         │                    │                   │                 │              │
+         │ 202 Accepted       │                   │                 │              │
+         │◄───────────────────┤                   │                 │              │
+         │                    │                   │                 │              │
+         │                    │                   │         ┌───────────────────┐  │
+         │                    │                   │         │ Wait until        │  │
+         │                    │                   │         │ scheduled time    │  │
+         │                    │                   │         └───────────────────┘  │
+         │                    │                   │                 │              │
+         │                    │                   │         Send SMS at            │
+         │                    │                   │         scheduled time         │
+         │                    │                   │                 ├─────────────►│
+         │                    │                   │                 │              │
+         │                    │                   │                 │ SMS sent     │
+         │                    │                   │                 │              │
+         │                    │                   │                 │ delivery     │
+         │                    │                   │                 │ status       │
+         │                    │                   │                 │◄─────────────┤
+         │                    │                   │                 │              │
+         │                    │                   │ update          │              │
+         │                    │                   │ scheduled_sms_  │              │
+         │                    │                   │ jobs            │              │
+         │                    │                   │ (delivered|     │              │
+         │                    │                   │  failed)        │              │
+         │                    │                   │◄────────────────┤              │
+         │                    │                   │                 │              │
+         │  realtime channel  │                   │                 │              │
+         │  pushes status     │                   │                 │              │
+         │  (optional future) │                   │                 │              │
+         │◄───────────────────────────────────────┤                 │              │
+         │                    │                   │                 │              │
 ```
 
 ---

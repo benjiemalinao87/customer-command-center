@@ -22,46 +22,110 @@
 
 ## 3. User Flow
 
-```mermaid
-graph TD
-    A[View Contact List] --> B{Contact Has Assignment?}
-    B -->|Yes| C[Display Agent Avatar]
-    C --> D[Show Status Indicator]
-    D --> E[Enable Hover Details]
-    B -->|No| F[Show Assignment Button]
-    F --> G[Click to Assign]
-    G --> H[Update UI with Avatar]
 ```
-
-ASCII Version:
-```
-Contact List
-    |
-    +-> Has Assignment? --Yes--> Show Avatar + Status
-    |                            |
-    |                            +-> Show Details on Hover
-    |
-    +-> No --> Show Assign Button --> Update UI on Click
+                         ┌──────────────────┐
+                         │  View Contact    │
+                         │  List            │
+                         └────────┬─────────┘
+                                  │
+                                  ▼
+                         ┌──────────────────┐
+                         │  Contact Has     │
+                         │  Assignment?     │
+                         └────┬───────┬─────┘
+                              │       │
+                         Yes  │       │  No
+                              │       │
+                    ┌─────────▼──┐  ┌▼────────────────┐
+                    │ Display    │  │ Show Assignment │
+                    │ Agent      │  │ Button          │
+                    │ Avatar     │  └─────────┬───────┘
+                    └──────┬─────┘            │
+                           │                  │
+                           ▼                  ▼
+                    ┌──────────────────┐  ┌──────────────────┐
+                    │ Show Status      │  │ Click to Assign  │
+                    │ Indicator        │  │                  │
+                    │ - Online (green) │  └─────────┬────────┘
+                    │ - Offline (gray) │            │
+                    └──────┬───────────┘            │
+                           │                        ▼
+                           ▼                ┌──────────────────┐
+                    ┌──────────────────┐    │ Assign Agent to  │
+                    │ Enable Hover     │    │ Contact          │
+                    │ Details          │    └─────────┬────────┘
+                    │ - Agent Name     │              │
+                    │ - Status         │              │
+                    │ - Assignment     │              ▼
+                    │   Time           │    ┌──────────────────┐
+                    └──────────────────┘    │ Update UI with   │
+                                            │ Avatar Display   │
+                                            └──────────────────┘
 ```
 
 ## 4. Front-end & Back-end Flow
 
-```mermaid
-sequenceDiagram
-    participant UI
-    participant AssignmentButton
-    participant AssignmentService
-    participant Supabase
-    
-    UI->>AssignmentService: Get Contact Assignments
-    AssignmentService->>Supabase: Query Assignments
-    Supabase-->>AssignmentService: Return Assignment Data
-    AssignmentService-->>UI: Return Agent Details
-    UI->>UI: Render Agent Avatar
-    
-    Note over UI: Real-time Updates
-    Supabase-->>AssignmentService: Assignment Changed
-    AssignmentService-->>UI: Update Avatar Display
+```
+┌────┐  ┌──────────────────┐  ┌───────────────────┐  ┌──────────┐
+│ UI │  │ AssignmentButton │  │ AssignmentService │  │ Supabase │
+└─┬──┘  └────────┬─────────┘  └─────────┬─────────┘  └────┬─────┘
+  │              │                       │                 │
+  │ Get Contact  │                       │                 │
+  │ Assignments  │                       │                 │
+  ├─────────────────────────────────────►│                 │
+  │              │                       │                 │
+  │              │                       │ Query           │
+  │              │                       │ livechat_       │
+  │              │                       │ contact_        │
+  │              │                       │ assignments_    │
+  │              │                       │ with_details    │
+  │              │                       ├────────────────►│
+  │              │                       │                 │
+  │              │                       │ select(*)       │
+  │              │                       │ .eq(contact_id) │
+  │              │                       │ .eq(status,     │
+  │              │                       │ 'active')       │
+  │              │                       │                 │
+  │              │                       │ Assignment Data │
+  │              │                       │ {               │
+  │              │                       │   agent_name,   │
+  │              │                       │   avatar_url,   │
+  │              │                       │   online_status │
+  │              │                       │ }               │
+  │              │                       │◄────────────────┤
+  │              │                       │                 │
+  │              │ Agent Details         │                 │
+  │◄─────────────────────────────────────┤                 │
+  │              │                       │                 │
+  │ Render       │                       │                 │
+  │ Agent        │                       │                 │
+  │ Avatar       │                       │                 │
+  │ Component    │                       │                 │
+  │              │                       │                 │
+  │ ┌──────────────────────────┐         │                 │
+  │ │ • Display avatar image   │         │                 │
+  │ │ • Show status indicator  │         │                 │
+  │ │ • Enable hover tooltip   │         │                 │
+  │ └──────────────────────────┘         │                 │
+  │              │                       │                 │
+  │              │                       │                 │
+  │     ┌────────────────────────────────────────┐         │
+  │     │  Real-time Updates via Subscription    │         │
+  │     └────────────────────────────────────────┘         │
+  │              │                       │                 │
+  │              │                       │ Assignment      │
+  │              │                       │ Changed         │
+  │              │                       │ (INSERT/UPDATE) │
+  │              │                       │◄────────────────┤
+  │              │                       │                 │
+  │              │ Update Avatar Display │                 │
+  │◄─────────────────────────────────────┤                 │
+  │              │                       │                 │
+  │ Re-render    │                       │                 │
+  │ with new     │                       │                 │
+  │ assignment   │                       │                 │
+  │ data         │                       │                 │
+  │              │                       │                 │
 ```
 
 ## 5. File Structure

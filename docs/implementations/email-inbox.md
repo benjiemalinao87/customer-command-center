@@ -29,131 +29,166 @@
 
 ## 3. User Flow
 
-*   **Mermaid Diagram**:
-    ```mermaid
-    graph TD
-        A[User opens Email Inbox] --> B{Select Folder};
-        B -- Inbox --> C[View Email List];
-        B -- Sent --> C;
-        B -- Starred --> C;
-        B -- Archive --> C;
-        B -- Trash --> C;
-        C --> D{Select Email};
-        D -- Email Selected --> E[View Email Content];
-        E --> F{Perform Action on Email};
-        F -- Reply --> G[Open Compose Modal with Reply Context];
-        F -- Reply All --> G;
-        F -- Forward --> G;
-        F -- Star --> C;
-        F -- Archive --> C;
-        F -- Delete --> C;
-        A --> H[Click Compose New Email];
-        H --> I[Open Compose Modal (New Email)];
-        G --> J{Fill Email Details};
-        I --> J;
-        J --> K[Click Send];
-        K --> L[Email Sent via Service];
-        L --> A;
-        C --> M[Search Emails];
-        M --> C;
-        A --> N[Refresh Email List];
-        N --> C;
+*   **User Flow Diagram**:
     ```
-
-*   **ASCII Diagram**:
-    ```
-    User opens Email Inbox
-        |
-        v
-    Select Folder (Inbox, Sent, Starred, Archive, Trash)
-        |
-        v
-    View Email List
-        |
-        v
-    Select Email
-        |
-        v
-    View Email Content
-        |
-        v
-    Perform Action on Email
-    / | \                (User can also directly compose new email)
-   /  |  \                     |
-  /   |   \                    v
- v    v    v            Open Compose Modal (New Email)
-Reply/  Star/                     |
-ReplyAll/ Archive/                  v
-Forward   Delete              Fill Email Details
- |      |                       |
- v      v                       v
-Open     Update               Click Send
-Compose   Email List                |
-Modal                             v
-(with context)              Email Sent via Service
- |                                |
- v                                v
-Fill Email Details        Return to Email Inbox
- |                                
- v                                
-Click Send
- |                                
- v                                
-Email Sent via Service
- |                                
- v                                
-Return to Email Inbox
+    ┌─────────────────────────────────────────────────────────────────────────────┐
+    │                         USER OPENS EMAIL INBOX                              │
+    └────────────────────────────┬────────────────────────────────────────────────┘
+                                 │
+                    ┌────────────┴────────────┐
+                    │                         │
+                    ▼                         ▼
+        ┌───────────────────────┐   ┌─────────────────────┐
+        │   SELECT FOLDER       │   │  COMPOSE NEW EMAIL  │
+        │  ┌─────────────┐      │   └──────────┬──────────┘
+        │  │ • Inbox     │      │              │
+        │  │ • Sent      │      │              ▼
+        │  │ • Starred   │      │   ┌─────────────────────────┐
+        │  │ • Archive   │      │   │  Open Compose Modal     │
+        │  │ • Trash     │      │   │  (New Email)            │
+        │  └─────────────┘      │   └──────────┬──────────────┘
+        └───────────┬───────────┘              │
+                    │                          │
+                    ▼                          │
+        ┌───────────────────────┐              │
+        │  VIEW EMAIL LIST      │              │
+        │  ┌─────────────────┐  │              │
+        │  │ Email 1 ✉       │  │              │
+        │  │ Email 2 ✉       │  │              │
+        │  │ Email 3 ✉       │  │              │
+        │  └─────────────────┘  │              │
+        └───────────┬───────────┘              │
+                    │                          │
+        ┌───────────┴──────────┐               │
+        │                      │               │
+        ▼                      ▼               │
+    ┌────────────┐    ┌──────────────────┐    │
+    │   SEARCH   │    │  SELECT EMAIL    │    │
+    │   EMAILS   │    └────────┬─────────┘    │
+    └────────────┘             │              │
+                               ▼              │
+                   ┌───────────────────────┐  │
+                   │ VIEW EMAIL CONTENT    │  │
+                   └───────────┬───────────┘  │
+                               │              │
+                               ▼              │
+                   ┌───────────────────────────────────────────┐
+                   │     PERFORM ACTION ON EMAIL               │
+                   └───┬──────┬──────┬──────┬──────┬──────────┘
+                       │      │      │      │      │
+           ┌───────────┘      │      │      │      └────────────┐
+           │                  │      │      │                   │
+           ▼                  ▼      ▼      ▼                   ▼
+    ┌─────────────┐    ┌──────┐ ┌──────┐ ┌───────┐      ┌──────────┐
+    │   REPLY /   │    │ STAR │ │UNSTAR│ │ARCHIVE│      │  DELETE  │
+    │  REPLY ALL /│    └──┬───┘ └──┬───┘ └───┬───┘      └────┬─────┘
+    │  FORWARD    │       │        │         │               │
+    └──────┬──────┘       │        │         │               │
+           │              └────────┴─────────┴───────────────┘
+           ▼                              │
+    ┌──────────────────────┐              │
+    │  Open Compose Modal  │              ▼
+    │  (with Reply Context)│    ┌──────────────────┐
+    └──────────┬───────────┘    │ Update Email List│
+               │                └──────────────────┘
+               │                         │
+               ├─────────────────────────┘
+               │
+               ▼
+    ┌─────────────────────────┐
+    │  FILL EMAIL DETAILS     │
+    │  ┌───────────────────┐  │
+    │  │ • To / CC / BCC   │  │
+    │  │ • Subject         │  │
+    │  │ • Body            │  │
+    │  │ • Attachments     │  │
+    │  └───────────────────┘  │
+    └───────────┬─────────────┘
+                │
+                ▼
+    ┌─────────────────────────┐
+    │     CLICK SEND          │
+    └───────────┬─────────────┘
+                │
+                ▼
+    ┌─────────────────────────┐
+    │  EMAIL SENT VIA SERVICE │
+    └───────────┬─────────────┘
+                │
+                ▼
+    ┌─────────────────────────┐
+    │  RETURN TO EMAIL INBOX  │
+    └─────────────────────────┘
     ```
 
 ## 4. Front-end & Back-end Flow
 
-*   **Mermaid Sequence Diagram (Example: Replying to an Email)**:
-    ```mermaid
-    sequenceDiagram
-        participant User
-        participant EmailInboxWindow (React)
-        participant EmailViewer (React)
-        participant ComposeModal (React)
-        participant emailService (JS)
-        participant BackendAPI (e.g., /api/email/send)
-
-        User->>EmailViewer: Clicks 'Reply' on an email
-        EmailViewer->>EmailInboxWindow: onReply({email, type: 'reply'})
-        EmailInboxWindow->>EmailInboxWindow: Sets replyContext, sets isComposeOpen=true
-        EmailInboxWindow->>ComposeModal: Renders with reply context (to, subject, original email for quote)
-
-        User->>ComposeModal: Fills reply body, Clicks 'Send'
-        ComposeModal->>EmailInboxWindow: onSend(replyEmailData)
-        EmailInboxWindow->>emailService: sendReply(originalEmail, replyEmailData)
-        emailService->>emailService: findOrCreateContact(originalEmail.from.email, workspaceId) # Assumed step
-        emailService->>BackendAPI: (Potentially GET/POST to /api/contacts to resolve contactId)
-        BackendAPI-->>emailService: contactId
-        emailService->>emailService: formatReplyContent(replyBody, originalEmail)
-        emailService->>emailService: sendEmail(formattedReplyData) # Internal call
-        emailService->>BackendAPI: POST /api/email/send with payload (to, subject, html, contactId, workspaceId, etc.)
-        BackendAPI-->>emailService: {success: true} or error
-        emailService-->>EmailInboxWindow: Promise resolves with API response
-        EmailInboxWindow->>ComposeModal: onClose()
-        EmailInboxWindow->>EmailInboxWindow: (Optionally) handleRefresh() to update email list
+*   **Sequence Flow: Replying to an Email**:
     ```
-
-*   **ASCII Equivalent (Example: Replying to an Email)**:
-    ```
-    User          EmailInboxWindow      EmailViewer     ComposeModal    emailService      BackendAPI
-     |                                 |-(Clicks Reply)-->|
-     |                 |<-(onReply)----------------------|
-     |                 |-(Sets context, opens modal)---->|
-     |                                                 |-(Fills, Clicks Send)-->|
-     |                 |<-(onSend)----------------------------------------------|
-     |                 |------------------------------->|-(sendReply)----------->|
-     |                 |                                |-(findOrCreateContact)->| (Assumed)
-     |                 |                                |<-(contactId)-----------|
-     |                 |                                |-(formatReplyContent)--|
-     |                 |                                |-(sendEmail)---------->|
-     |                 |                                |----------------------->| POST /api/email/send
-     |                 |                                |<-(Success/Error)-------|
-     |                 |<-(Promise resolves)------------|
-     |                 |-(Closes modal, maybe refreshes)-|
+    ┌──────┐  ┌──────────────────┐  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐  ┌─────────────────┐
+    │ User │  │ EmailInboxWindow │  │ EmailViewer │  │ ComposeModal │  │ emailService │  │   BackendAPI    │
+    └──┬───┘  └────────┬─────────┘  └──────┬──────┘  └──────┬───────┘  └──────┬───────┘  └────────┬────────┘
+       │               │                   │                │                 │                   │
+       │  Click Reply  │                   │                │                 │                   │
+       ├──────────────────────────────────>│                │                 │                   │
+       │               │                   │                │                 │                   │
+       │               │   onReply({email, type: 'reply'}) │                 │                   │
+       │               │<──────────────────┤                │                 │                   │
+       │               │                   │                │                 │                   │
+       │               │  Sets replyContext, isComposeOpen=true               │                   │
+       │               ├──────────┐        │                │                 │                   │
+       │               │          │        │                │                 │                   │
+       │               │<─────────┘        │                │                 │                   │
+       │               │                   │                │                 │                   │
+       │               │  Renders with reply context        │                 │                   │
+       │               ├───────────────────────────────────>│                 │                   │
+       │               │                   │                │                 │                   │
+       │  Fill reply   │                   │                │                 │                   │
+       │  & Click Send │                   │                │                 │                   │
+       ├───────────────────────────────────────────────────>│                 │                   │
+       │               │                   │                │                 │                   │
+       │               │  onSend(replyEmailData)            │                 │                   │
+       │               │<───────────────────────────────────┤                 │                   │
+       │               │                   │                │                 │                   │
+       │               │  sendReply(originalEmail, replyEmailData)            │                   │
+       │               ├─────────────────────────────────────────────────────>│                   │
+       │               │                   │                │                 │                   │
+       │               │                   │                │  findOrCreateContact()              │
+       │               │                   │                │  ┌──────────────┴─────────────┐     │
+       │               │                   │                │  │ Internal processing        │     │
+       │               │                   │                │  └──────────────┬─────────────┘     │
+       │               │                   │                │                 │                   │
+       │               │                   │                │  GET/POST /api/contacts             │
+       │               │                   │                │                 ├──────────────────>│
+       │               │                   │                │                 │                   │
+       │               │                   │                │       contactId │                   │
+       │               │                   │                │                 │<──────────────────┤
+       │               │                   │                │                 │                   │
+       │               │                   │                │  formatReplyContent()               │
+       │               │                   │                │  ┌──────────────┴─────────────┐     │
+       │               │                   │                │  │ Format email body          │     │
+       │               │                   │                │  └──────────────┬─────────────┘     │
+       │               │                   │                │                 │                   │
+       │               │                   │                │  POST /api/email/send               │
+       │               │                   │                │                 ├──────────────────>│
+       │               │                   │                │                 │                   │
+       │               │                   │                │  {success: true}│                   │
+       │               │                   │                │                 │<──────────────────┤
+       │               │                   │                │                 │                   │
+       │               │  Promise resolves with API response                 │                   │
+       │               │<─────────────────────────────────────────────────────┤                   │
+       │               │                   │                │                 │                   │
+       │               │  onClose()        │                │                 │                   │
+       │               ├───────────────────────────────────>│                 │                   │
+       │               │                   │                │                 │                   │
+       │               │  handleRefresh() (optional)        │                 │                   │
+       │               ├──────────┐        │                │                 │                   │
+       │               │          │        │                │                 │                   │
+       │               │<─────────┘        │                │                 │                   │
+       │               │                   │                │                 │                   │
+    ┌──┴───┐  ┌────────┴─────────┐  ┌──────┴──────┐  ┌──────┴───────┐  ┌──────┴───────┐  ┌────────┴────────┐
+    │ User │  │ EmailInboxWindow │  │ EmailViewer │  │ ComposeModal │  │ emailService │  │   BackendAPI    │
+    └──────┘  └──────────────────┘  └─────────────┘  └──────────────┘  └──────────────┘  └─────────────────┘
     ```
 
 ## 5. File Structure

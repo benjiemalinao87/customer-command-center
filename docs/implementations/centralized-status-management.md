@@ -24,89 +24,191 @@ The solution centralizes all status data fetching in a shared context, eliminati
 
 ## 3. User Flow
 
-```mermaid
-flowchart TD
-    A[User opens Board view] --> B[BoardWindow loads]
-    B --> C[StatusProvider initializes]
-    C --> D[StatusProvider fetches all status data]
-    D --> E[Board columns and contacts render]
-    E --> F[ContactCards read status data from context]
-    F --> G[User sees contacts with correct statuses]
-    
-    H[User changes a contact status] --> I[Status update sent to API]
-    I --> J[StatusProvider cache updated]
-    J --> K[All components using status automatically update]
-```
+### Initial Board Load Flow
 
 ```
-+---------------------+     +---------------------+     +---------------------+
-| User opens          |     | StatusProvider      |     | ContactCards        |
-| Board view          |---->| fetches all         |---->| read from           |
-|                     |     | status data once    |     | context (no API)    |
-+---------------------+     +---------------------+     +---------------------+
-                                     |
-                                     v
-+---------------------+     +---------------------+
-| Status updates      |     | Context updated     |
-| propagate to all    |<----| automatically on    |
-| components          |     | any status change   |
-+---------------------+     +---------------------+
+                    ┌───────────────────────┐
+                    │ User opens            │
+                    │ Board view            │
+                    └──────────┬────────────┘
+                               │
+                               ▼
+                    ┌───────────────────────┐
+                    │ BoardWindow loads     │
+                    └──────────┬────────────┘
+                               │
+                               ▼
+                    ┌───────────────────────┐
+                    │ StatusProvider        │
+                    │ initializes           │
+                    └──────────┬────────────┘
+                               │
+                               ▼
+                    ┌───────────────────────┐
+                    │ StatusProvider        │
+                    │ fetches all           │
+                    │ status data           │
+                    │ (categories +         │
+                    │  options)             │
+                    └──────────┬────────────┘
+                               │
+                               ▼
+                    ┌───────────────────────┐
+                    │ Board columns and     │
+                    │ contacts render       │
+                    └──────────┬────────────┘
+                               │
+                               ▼
+                    ┌───────────────────────┐
+                    │ ContactCards read     │
+                    │ status data from      │
+                    │ context (no API)      │
+                    └──────────┬────────────┘
+                               │
+                               ▼
+                    ┌───────────────────────┐
+                    │ User sees contacts    │
+                    │ with correct          │
+                    │ statuses              │
+                    └───────────────────────┘
+```
+
+### Status Update Flow
+
+```
+                    ┌───────────────────────┐
+                    │ User changes a        │
+                    │ contact status        │
+                    └──────────┬────────────┘
+                               │
+                               ▼
+                    ┌───────────────────────┐
+                    │ Status update         │
+                    │ sent to API           │
+                    │ (via ContactCard)     │
+                    └──────────┬────────────┘
+                               │
+                               ▼
+                    ┌───────────────────────┐
+                    │ Supabase updates      │
+                    │ database              │
+                    └──────────┬────────────┘
+                               │
+                               ▼
+                    ┌───────────────────────┐
+                    │ StatusProvider        │
+                    │ cache updated         │
+                    │ (via context)         │
+                    └──────────┬────────────┘
+                               │
+                               ▼
+                    ┌───────────────────────┐
+                    │ All components        │
+                    │ using status          │
+                    │ automatically update  │
+                    │ (re-render with       │
+                    │  new data)            │
+                    └───────────────────────┘
 ```
 
 ## 4. Front-end & Back-end Flow
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant BR as BoardWindow
-    participant SP as StatusProvider
-    participant CC as ContactCard Components
-    participant SB as Supabase Database
-    
-    U->>BR: Open Board
-    BR->>SP: Initialize
-    SP->>SB: Single fetch request for all status categories
-    SB-->>SP: Return categories data
-    SP->>SB: Single fetch request for all status options
-    SB-->>SP: Return options data
-    SP->>SP: Process and format status data
-    BR->>BR: Fetch and render board data
-    BR->>CC: Render multiple ContactCards
-    CC->>SP: Read status data from context
-    CC->>U: Display with correct statuses
-    
-    Note over U,SB: Status Update Flow
-    U->>CC: Update contact status
-    CC->>SB: Single API call to update status
-    SB-->>CC: Confirm update
-    CC->>SP: Notify of status change
-    SP->>SP: Update context data
-    SP->>CC: Broadcast status change to all components
-```
+### Initial Load Sequence
 
 ```
-User        BoardWindow       StatusProvider        ContactCards      Supabase
- |               |                   |                    |               |
- |--Open Board-->|                   |                    |               |
- |               |---Initialize----->|                    |               |
- |               |                   |---Fetch Categories--------------->|
- |               |                   |<--Return Categories---------------|
- |               |                   |---Fetch Options----------------->|
- |               |                   |<--Return Options-----------------|
- |               |                   |----Process Data----|               |
- |               |---Render Board-->|                    |               |
- |               |                   |                    |               |
- |               |----------------Render ContactCards--->|               |
- |               |                   |<---Read Status Data From Context--|
- |<-----------------------------------------Display Cards------------|
- |               |                   |                    |               |
- |--Update Status-------------------------->|               |
- |               |                   |                    |---API Call-->|
- |               |                   |                    |<--Confirm----|
- |               |                   |<--Notify Change----|               |
- |               |                   |---Update Context-->|               |
- |               |                   |---Broadcast Change--------------->|
- |<-----------------------------------------Display Updated----------|
+┌──────┐   ┌─────────────┐   ┌────────────────┐   ┌──────────────┐   ┌──────────┐
+│ User │   │ BoardWindow │   │ StatusProvider │   │ ContactCards │   │ Supabase │
+└──┬───┘   └──────┬──────┘   └────────┬───────┘   └──────┬───────┘   └────┬─────┘
+   │              │                    │                  │                │
+   │ Open Board   │                    │                  │                │
+   ├─────────────►│                    │                  │                │
+   │              │                    │                  │                │
+   │              │ Initialize         │                  │                │
+   │              ├───────────────────►│                  │                │
+   │              │                    │                  │                │
+   │              │                    │ Single fetch     │                │
+   │              │                    │ request for all  │                │
+   │              │                    │ status categories│                │
+   │              │                    ├─────────────────────────────────►│
+   │              │                    │                  │                │
+   │              │                    │ Return           │                │
+   │              │                    │ categories data  │                │
+   │              │                    │◄─────────────────────────────────┤
+   │              │                    │                  │                │
+   │              │                    │ Single fetch     │                │
+   │              │                    │ request for all  │                │
+   │              │                    │ status options   │                │
+   │              │                    ├─────────────────────────────────►│
+   │              │                    │                  │                │
+   │              │                    │ Return           │                │
+   │              │                    │ options data     │                │
+   │              │                    │◄─────────────────────────────────┤
+   │              │                    │                  │                │
+   │              │                    │ Process and      │                │
+   │              │                    │ format status    │                │
+   │              │                    │ data             │                │
+   │              │                    │                  │                │
+   │              │ Fetch and render   │                  │                │
+   │              │ board data         │                  │                │
+   │              │                    │                  │                │
+   │              │ Render multiple    │                  │                │
+   │              │ ContactCards       │                  │                │
+   │              ├─────────────────────────────────────►│                │
+   │              │                    │                  │                │
+   │              │                    │ Read status data │                │
+   │              │                    │ from context     │                │
+   │              │                    │ (no API call!)   │                │
+   │              │                    │◄─────────────────┤                │
+   │              │                    │                  │                │
+   │              │ Display with       │                  │                │
+   │              │ correct statuses   │                  │                │
+   │◄─────────────┼────────────────────────────────────────               │
+   │              │                    │                  │                │
+```
+
+### Status Update Flow
+
+```
+┌──────┐   ┌──────────────┐   ┌────────────────┐   ┌──────────┐
+│ User │   │ ContactCards │   │ StatusProvider │   │ Supabase │
+└──┬───┘   └──────┬───────┘   └────────┬───────┘   └────┬─────┘
+   │              │                     │                │
+   │ Update       │                     │                │
+   │ contact      │                     │                │
+   │ status       │                     │                │
+   ├─────────────►│                     │                │
+   │              │                     │                │
+   │              │ Single API call     │                │
+   │              │ to update status    │                │
+   │              ├──────────────────────────────────────►│
+   │              │                     │                │
+   │              │                     │ Database       │
+   │              │                     │ updated        │
+   │              │                     │                │
+   │              │ Confirm update      │                │
+   │              │◄──────────────────────────────────────┤
+   │              │                     │                │
+   │              │ Notify of status    │                │
+   │              │ change              │                │
+   │              ├────────────────────►│                │
+   │              │                     │                │
+   │              │                     │ Update context │
+   │              │                     │ data           │
+   │              │                     │                │
+   │              │                     │                │
+   │              │ Broadcast status    │                │
+   │              │ change to all       │                │
+   │              │ components          │                │
+   │              │◄────────────────────┤                │
+   │              │                     │                │
+   │              │ Re-render with      │                │
+   │              │ updated status      │                │
+   │              │                     │                │
+   │◄─────────────┤                     │                │
+   │ Display      │                     │                │
+   │ updated      │                     │                │
+   │ status       │                     │                │
+   │              │                     │                │
 ```
 
 ## 5. File Structure

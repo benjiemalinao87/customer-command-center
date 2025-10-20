@@ -30,119 +30,239 @@ This feature implements an automatic keyword response system that allows users t
 
 ## 3. User Flow
 
-```mermaid
-flowchart TD
-    A[User visits Flow Manager] --> B[Selects Keywords Tab]
-    B --> C{Action?}
-    C -->|Create New| D[Click Add Keyword Button]
-    C -->|Manage Existing| E[View Keyword List]
-    D --> F[Fill Keyword Form]
-    F --> G[Define Match Rule]
-    G --> H[Enter Keywords]
-    H --> I[Choose Sub Flow/Enter Reply]
-    I --> J[Save Keyword Rule]
-    J --> E
-    E --> K{Options}
-    K -->|Toggle| L[Activate/Deactivate Rule]
-    K -->|Edit| M[Modify Rule Details]
-    K -->|Delete| N[Remove Rule]
-    L --> E
-    M --> F
-    N --> E
 ```
-
-```
-+-------------------+     +-------------------+     +-------------------+
-| User visits       |---->| Selects           |---->| Choose action     |
-| Flow Manager      |     | Keywords Tab      |     | Create or Manage  |
-+-------------------+     +-------------------+     +--------+----------+
-                                                             |
-                                                             v
-+-------------------+     +-------------------+     +-------------------+
-| Save Keyword      |<----| Choose Sub Flow/  |<----| Define Keywords   |
-| Rule              |     | Enter Reply       |     | and match rules   |
-+-------------------+     +-------------------+     +-------------------+
-        |
-        v
-+-------------------+     +-------------------+
-| View/Edit/Toggle  |<--->| Keyword List      |
-| Delete Rules      |     | Interface         |
-+-------------------+     +-------------------+
+                            ┌─────────────────────────┐
+                            │  User visits            │
+                            │  Flow Manager           │
+                            └───────────┬─────────────┘
+                                        │
+                                        ▼
+                            ┌─────────────────────────┐
+                            │  Selects                │
+                            │  Keywords Tab           │
+                            └───────────┬─────────────┘
+                                        │
+                                        ▼
+                            ┌─────────────────────────┐
+                            │   Choose Action?        │
+                            │  ┌─────────────────┐   │
+                            │  │ Create New      │   │
+                            │  │ Manage Existing │   │
+                            │  └─────────────────┘   │
+                            └─────┬───────────┬───────┘
+                                  │           │
+                    Create New ◄──┘           └──► Manage Existing
+                                  │                       │
+                                  ▼                       ▼
+                    ┌──────────────────────┐  ┌──────────────────────┐
+                    │  Click Add Keyword   │  │  View Keyword List   │◄──┐
+                    │  Button              │  │                      │   │
+                    └──────────┬───────────┘  └──────┬──────┬────┬───┘   │
+                               │                     │      │    │       │
+                               ▼                     │      │    │       │
+                    ┌──────────────────────┐         │      │    │       │
+                    │  Fill Keyword Form   │◄────────┤      │    │       │
+                    │  - Name              │  Edit   │      │    │       │
+                    │  - Description       │         │      │    │       │
+                    └──────────┬───────────┘         │      │    │       │
+                               │                     │      │    │       │
+                               ▼              Toggle │      │    │       │
+                    ┌──────────────────────┐         │      │    │       │
+                    │  Define Match Rule   │         │      │    │       │
+                    │  - Contains          │         │      │    │       │
+                    │  - Equals            │         │      │    │       │
+                    │  - Starts With       │         ▼      │    │       │
+                    │  - Ends With         │  ┌──────────────────────┐   │
+                    └──────────┬───────────┘  │  Activate/Deactivate │   │
+                               │              │  Rule                │   │
+                               ▼              └──────────┬───────────┘   │
+                    ┌──────────────────────┐            │               │
+                    │  Enter Keywords      │            └───────────────┤
+                    │  - keyword1          │                            │
+                    │  - keyword2          │                            │
+                    │  - keyword3          │                     Delete │
+                    └──────────┬───────────┘                            │
+                               │                                 ┌──────────────────┐
+                               ▼                                 │  Remove Rule     │
+                    ┌──────────────────────┐                     │  (Confirmation)  │
+                    │  Choose Response     │                     └──────────┬───────┘
+                    │  Type:               │                                │
+                    │  ┌─────────────────┐ │                                │
+                    │  │ Sub Flow        │ │                                │
+                    │  │ Text Reply      │ │                                │
+                    │  └─────────────────┘ │                                │
+                    └──────────┬───────────┘                                │
+                               │                                            │
+                               ▼                                            │
+                    ┌──────────────────────┐                                │
+                    │  Save Keyword Rule   │                                │
+                    └──────────┬────────���──┘                                │
+                               │                                            │
+                               └────────────────────────────────────────────┘
 ```
 
 ## 4. Front-end & Back-end Flow
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant UI as React UI
-    participant API as API Layer
-    participant S as Services
-    participant DB as Supabase
-
-    U->>UI: Open Keywords Tab
-    UI->>API: GET /api/keywords
-    API->>S: keywordService.getKeywords()
-    S->>DB: supabase.from('keyword_rules').select()
-    DB->>S: Return keyword rules
-    S->>API: Return formatted rules
-    API->>UI: Display rules list
-    
-    U->>UI: Create new rule
-    UI->>API: POST /api/keywords
-    API->>S: keywordService.createKeyword()
-    S->>DB: supabase.from('keyword_rules').insert()
-    DB->>S: Return success/failure
-    S->>API: Return result
-    API->>UI: Update UI with new rule
-    
-    U->>UI: Toggle rule activation
-    UI->>API: PATCH /api/keywords/:id/toggle
-    API->>S: keywordService.toggleKeyword()
-    S->>DB: supabase.from('keyword_rules').update()
-    DB->>S: Return success/failure
-    S->>API: Return updated status
-    API->>UI: Update toggle state
-
-    Note over U,DB: Incoming Message Processing
-    U->>API: SMS to Twilio number
-    API->>S: Twilio webhook to /api/twilio/webhook
-    S->>DB: Save message to livechat_messages
-    S->>S: processKeywordMatch(message)
-    S->>DB: Get active keyword rules
-    S->>S: Check for keyword matches
-    S->>DB: If match, log to keyword_rule_logs
-    S->>S: Execute response (text or flow)
-    S->>API: Return success response
-    API->>U: Send automated reply (if applicable)
-```
+### Keyword Management Flow
 
 ```
-User         React UI          API Layer        Services         Supabase
- |               |                |                |                |
- |--Open Tab---->|                |                |                |
- |               |----GET /api--->|                |                |
- |               |                |---getKeywords->|                |
- |               |                |                |---select()---->|
- |               |                |                |<---results-----|
- |               |                |<---return------|                |
- |               |<---display-----|                |                |
- |               |                |                |                |
- |--Create rule->|                |                |                |
- |               |---POST /api--->|                |                |
- |               |                |--createKeyword>|                |
- |               |                |                |---insert()---->|
- |               |                |                |<---success-----|
- |               |                |<---return------|                |
- |               |<---update------|                |                |
- |               |                |                |                |
- |--Toggle------>|                |                |                |
- |               |---PATCH /api-->|                |                |
- |               |                |--toggleKeyword>|                |
- |               |                |                |---update()---->|
- |               |                |                |<---success-----|
- |               |                |<---return------|                |
- |               |<---update------|                |                |
+┌──────┐     ┌──────────┐     ┌───────────┐     ┌──────────┐     ┌──────────┐
+│ User │     │ React UI │     │ API Layer │     │ Services │     │ Supabase │
+└──┬───┘     └────┬─────┘     └─────┬─────┘     └────┬─────┘     └────┬─────┘
+   │              │                  │                 │                │
+   │ Open         │                  │                 │                │
+   │ Keywords Tab │                  │                 │                │
+   ├─────────────►│                  │                 │                │
+   │              │                  │                 │                │
+   │              │ GET              │                 │                │
+   │              │ /api/keywords    │                 │                │
+   │              ├─────────────────►│                 │                │
+   │              │                  │                 │                │
+   │              │                  │ getKeywords()   │                │
+   │              │                  ├────────────────►│                │
+   │              │                  │                 │                │
+   │              │                  │                 │ select()       │
+   │              │                  │                 │ FROM           │
+   │              │                  │                 │ keyword_rules  │
+   │              │                  │                 ├───────────────►│
+   │              │                  │                 │                │
+   │              │                  │                 │ keyword rules  │
+   │              │                  │                 │◄───────────────┤
+   │              │                  │                 │                │
+   │              │                  │ formatted rules │                │
+   │              │                  │◄────────────────┤                │
+   │              │                  │                 │                │
+   │              │ rules list       │                 │                │
+   │              │◄─────────────────┤                 │                │
+   │              │                  │                 │                │
+   │◄─────────────┤                  │                 │                │
+   │ Display      │                  │                 │                │
+   │ rules list   │                  │                 │                │
+   │              │                  │                 │                │
+   │ Create       │                  │                 │                │
+   │ new rule     │                  │                 │                │
+   ├─────────────►│                  │                 │                │
+   │              │                  │                 │                │
+   │              │ POST             │                 │                │
+   │              │ /api/keywords    │                 │                │
+   │              ├─────────────────►│                 │                │
+   │              │                  │                 │                │
+   │              │                  │ createKeyword() │                │
+   │              │                  ├────────────────►│                │
+   │              │                  │                 │                │
+   │              │                  │                 │ insert()       │
+   │              │                  │                 ├───────────────►│
+   │              │                  │                 │                │
+   │              │                  │                 │ success        │
+   │              │                  │                 │◄───────────────┤
+   │              │                  │                 │                │
+   │              │                  │ created rule    │                │
+   │              │                  │◄────────────────┤                │
+   │              │                  │                 │                │
+   │              │ new rule         │                 │                │
+   │              │◄─────────────────┤                 │                │
+   │              │                  │                 │                │
+   │◄─────────────┤                  │                 │                │
+   │ Updated UI   │                  │                 │                │
+   │              │                  │                 │                │
+   │ Toggle       │                  │                 │                │
+   │ activation   │                  │                 │                │
+   ├─────────────►│                  │                 │                │
+   │              │                  │                 │                │
+   │              │ PATCH            │                 │                │
+   │              │ /api/keywords/   │                 │                │
+   │              │ :id/toggle       │                 │                │
+   │              ├─────────────────►│                 │                │
+   │              │                  │                 │                │
+   │              │                  │ toggleKeyword() │                │
+   │              │                  ├────────────────►│                │
+   │              │                  │                 │                │
+   │              │                  │                 │ update()       │
+   │              │                  │                 ├───────────────►│
+   │              │                  │                 │                │
+   │              │                  │                 │ success        │
+   │              │                  │                 │◄───────────────┤
+   │              │                  │                 │                │
+   │              │                  │ updated status  │                │
+   │              │                  │◄────────────────┤                │
+   │              │                  │                 │                │
+   │              │ toggle state     │                 │                │
+   │              │◄─────────────────┤                 │                │
+   │              │                  │                 │                │
+   │◄─────────────┤                  │                 │                │
+   │ Updated      │                  │                 │                │
+   │ toggle UI    │                  │                 │                │
+   │              │                  │                 │                │
+```
+
+### Incoming Message Processing Flow
+
+```
+┌──────────┐     ┌───────────┐     ┌──────────┐     ┌──────────┐
+│ Customer │     │ API Layer │     │ Services │     │ Supabase │
+│ (SMS)    │     │           │     │          │     │          │
+└────┬─────┘     └─────┬─────┘     └────┬─────┘     └────┬─────┘
+     │                 │                 │                │
+     │ Send SMS to     │                 │                │
+     │ Twilio number   │                 │                │
+     ├────────────────►│                 │                │
+     │                 │                 │                │
+     │                 │ POST            │                │
+     │                 │ /api/twilio/    │                │
+     │                 │ webhook         │                │
+     │                 │                 │                │
+     │                 │                 │ insert()       │
+     │                 │                 │ message to     │
+     │                 │                 │ livechat_      │
+     │                 │                 │ messages       │
+     │                 │                 ├───────────────►│
+     │                 │                 │                │
+     │                 │                 │ success        │
+     │                 │                 │◄───────────────┤
+     │                 │                 │                │
+     │                 │                 │ select()       │
+     │                 │                 │ active         │
+     │                 │                 │ keyword_rules  │
+     │                 │                 ├───────────────►│
+     │                 │                 │                │
+     │                 │                 │ active rules   │
+     │                 │                 │◄───────────────┤
+     │                 │                 │                │
+     │                 │                 │ Process        │
+     │                 │                 │ keyword        │
+     │                 │                 │ matching       │
+     │                 │                 │ logic          │
+     │                 │                 │                │
+     │                 │                 │ ┌─────────────┐│
+     │                 │                 │ │ Check each  ││
+     │                 │                 │ │ rule:       ││
+     │                 │                 │ │ - contains  ││
+     │                 │                 │ │ - equals    ││
+     │                 │                 │ │ - starts    ││
+     │                 │                 │ │ - ends      ││
+     │                 │                 │ └─────────────┘│
+     │                 │                 │                │
+     │                 │                 │ insert()       │
+     │                 │                 │ to keyword_    │
+     │                 │                 │ rule_logs      │
+     │                 │                 ├───────────────►│
+     │                 │                 │                │
+     │                 │                 │ log created    │
+     │                 │                 │◄───────────────┤
+     │                 │                 │                │
+     │                 │                 │ Execute        │
+     │                 │                 │ response:      │
+     │                 │                 │ - Text reply   │
+     │                 │                 │ - Trigger flow │
+     │                 │                 │                │
+     │                 │ success         │                │
+     │                 │◄────────────────┤                │
+     │                 │                 │                │
+     │◄────────────────┤                 │                │
+     │ Receive         │                 │                │
+     │ automated reply │                 │                │
+     │ (if applicable) │                 │                │
+     │                 │                 │                │
 ```
 
 ## 5. File Structure

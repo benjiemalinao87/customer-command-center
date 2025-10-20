@@ -8,38 +8,148 @@ This document provides the complete technical specification for implementing the
 
 ### Entity Relationship Diagram
 
-```mermaid
-erDiagram
-    WORKSPACES ||--o{ CONTACTS : belongs_to
-    WORKSPACES ||--o{ LEADS : belongs_to
-    WORKSPACES ||--o{ CUSTOM_FIELD_DEFINITIONS : belongs_to
-    WORKSPACES ||--o{ PIPELINE_STAGES : belongs_to
-    WORKSPACES ||--o{ LEAD_SOURCES : belongs_to
-    
-    CONTACTS ||--o{ LEADS : has_many
-    CONTACTS ||--o{ CONTACT_CUSTOM_FIELDS : has_many
-    CONTACTS ||--o{ CONTACT_ACTIVITIES : has_many
-    CONTACTS ||--o{ CONTACT_ASSIGNMENTS : has_many
-    
-    LEADS ||--o{ LEAD_APPOINTMENTS : has_many
-    LEADS ||--o{ LEAD_CUSTOM_FIELDS : has_many
-    LEADS ||--o{ LEAD_ACTIVITIES : has_many
-    LEADS ||--o{ LEAD_STAGE_HISTORY : has_many
-    LEADS ||--o{ LEAD_JOBS : has_many
-    
-    PIPELINE_STAGES ||--o{ LEADS : current_stage
-    PIPELINE_STAGES ||--o{ LEAD_STAGE_HISTORY : stage
-    
-    CUSTOM_FIELD_DEFINITIONS ||--o{ CONTACT_CUSTOM_FIELDS : field_definition
-    CUSTOM_FIELD_DEFINITIONS ||--o{ LEAD_CUSTOM_FIELDS : field_definition
-    
-    LEAD_SOURCES ||--o{ LEADS : source
-    
-    USERS ||--o{ CONTACT_ASSIGNMENTS : assigned_user
-    USERS ||--o{ LEAD_APPOINTMENTS : set_by
-    USERS ||--o{ LEAD_APPOINTMENTS : verified_by
-    USERS ||--o{ LEAD_APPOINTMENTS : confirmed_by
-    
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    DATABASE ENTITY RELATIONSHIPS                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                              ┌──────────────┐
+                              │  WORKSPACES  │
+                              └───────┬──────┘
+                                      │
+        ┌─────────────────────────────┼─────────────────────────────┐
+        │                             │                             │
+        │ (1:N)                       │ (1:N)                       │ (1:N)
+        ▼                             ▼                             ▼
+┌───────────────┐            ┌────────────────┐          ┌──────────────────┐
+│   CONTACTS    │            │     LEADS      │          │ PIPELINE_STAGES  │
+├───────────────┤            ├────────────────┤          ├──────────────────┤
+│ • id (PK)     │───────────>│ • id (PK)      │<─────────│ • id (PK)        │
+│ • workspace   │   (1:N)    │ • contact_id   │  (N:1)   │ • workspace_id   │
+│ • firstname   │            │ • workspace_id │          │ • name           │
+│ • lastname    │            │ • product      │          │ • category       │
+│ • email       │            │ • stage_id     │          │ • display_order  │
+│ • phone       │            │ • source_id    │          └──────────────────┘
+│ • address     │            │ • disposition  │
+│ • metadata    │            │ • value        │
+└───────┬───────┘            │ • owner_id     │
+        │                    └────────┬───────┘
+        │                             │
+        │ (1:N)                       │ (1:N)
+        ▼                             ▼
+┌───────────────────┐      ┌──────────────────────┐
+│ CONTACT_CUSTOM_   │      │ LEAD_APPOINTMENTS    │
+│ FIELDS            │      ├──────────────────────┤
+├───────────────────┤      │ • id (PK)            │
+│ • contact_id (FK) │      │ • lead_id (FK)       │
+│ • field_id (FK)   │      │ • appointment_date   │
+│ • value           │      │ • status             │
+└───────────────────┘      │ • outcome            │
+                           │ • set_by (FK→users)  │
+        │                  │ • verified_by (FK)   │
+        │ (1:N)            │ • confirmed_by (FK)  │
+        ▼                  └──────────────────────┘
+┌───────────────────┐
+│ CONTACT_          │              │ (1:N)
+│ ACTIVITIES        │              ▼
+├───────────────────┤      ┌──────────────────────┐
+│ • id (PK)         │      │ LEAD_CUSTOM_FIELDS   │
+│ • contact_id (FK) │      ├──────────────────────┤
+│ • activity_type   │      │ • lead_id (FK)       │
+│ • description     │      │ • field_id (FK)      │
+└───────────────────┘      │ • value              │
+                           └──────────────────────┘
+        │ (1:N)
+        ▼                          │ (1:N)
+┌───────────────────┐              ▼
+│ CONTACT_          │      ┌──────────────────────┐
+│ ASSIGNMENTS       │      │ LEAD_ACTIVITIES      │
+├───────────────────┤      ├──────────────────────┤
+│ • contact_id (FK) │      │ • id (PK)            │
+│ • user_id (FK)    │      │ • lead_id (FK)       │
+│ • assigned_at     │      │ • activity_type      │
+└───────────────────┘      │ • description        │
+                           └──────────────────────┘
+
+                                   │ (1:N)
+                                   ▼
+                           ┌──────────────────────┐
+                           │ LEAD_STAGE_HISTORY   │
+                           ├──────────────────────┤
+                           │ • id (PK)            │
+                           │ • lead_id (FK)       │
+                           │ • from_stage_id (FK) │
+                           │ • to_stage_id (FK)   │
+                           │ • changed_at         │
+                           │ • changed_by (FK)    │
+                           └──────────────────────┘
+
+                                   │ (1:N)
+                                   ▼
+                           ┌──────────────────────┐
+                           │ LEAD_JOBS            │
+                           ├──────────────────────┤
+                           │ • id (PK)            │
+                           │ • lead_id (FK)       │
+                           │ • job_details        │
+                           └──────────────────────┘
+
+
+┌────────────────────────────┐         ┌──────────────────────┐
+│ CUSTOM_FIELD_DEFINITIONS   │────────>│ LEAD_SOURCES         │
+├────────────────────────────┤  (1:N)  ├──────────────────────┤
+│ • id (PK)                  │         │ • id (PK)            │
+│ • workspace_id (FK)        │         │ • workspace_id (FK)  │
+│ • name                     │         │ • name               │
+│ • field_type               │         │ • category           │
+│ • context (contact/lead)   │         │ • is_active          │
+│ • configuration            │         └──────────────────────┘
+│ • is_required              │
+└────────────┬───────────────┘
+             │
+             │ (1:N)
+             ├───────────────────────────────┐
+             │                               │
+             ▼                               ▼
+    ┌────────────────────┐         ┌────────────────────┐
+    │ CONTACT_CUSTOM_    │         │ LEAD_CUSTOM_       │
+    │ FIELDS             │         │ FIELDS             │
+    └────────────────────┘         └────────────────────┘
+
+
+KEY RELATIONSHIPS:
+═══════════════════════════════════════════════════════════════
+• WORKSPACES (1) ──────> (N) CONTACTS
+• WORKSPACES (1) ──────> (N) LEADS
+• WORKSPACES (1) ──────> (N) PIPELINE_STAGES
+• WORKSPACES (1) ──────> (N) CUSTOM_FIELD_DEFINITIONS
+• WORKSPACES (1) ──────> (N) LEAD_SOURCES
+
+• CONTACTS (1) ────────> (N) LEADS
+• CONTACTS (1) ────────> (N) CONTACT_CUSTOM_FIELDS
+• CONTACTS (1) ────────> (N) CONTACT_ACTIVITIES
+• CONTACTS (1) ────────> (N) CONTACT_ASSIGNMENTS
+
+• LEADS (1) ───────────> (N) LEAD_APPOINTMENTS
+• LEADS (1) ───────────> (N) LEAD_CUSTOM_FIELDS
+• LEADS (1) ───────────> (N) LEAD_ACTIVITIES
+• LEADS (1) ───────────> (N) LEAD_STAGE_HISTORY
+• LEADS (1) ───────────> (N) LEAD_JOBS
+
+• PIPELINE_STAGES (1) ─> (N) LEADS (current_stage)
+• LEAD_SOURCES (1) ────> (N) LEADS (source)
+• USERS (1) ───────────> (N) CONTACT_ASSIGNMENTS
+• USERS (1) ───────────> (N) LEAD_APPOINTMENTS
+
+CARDINALITY NOTATION:
+═══════════════════════════════════════════════════════════════
+(1) ──> (N) = One-to-Many relationship
+(N) ──> (1) = Many-to-One relationship
+
+
+DETAILED FIELD SPECIFICATIONS:
+═══════════════════════════════════════════════════════════════
+
     CONTACTS {
         uuid id PK
         text workspace_id FK
