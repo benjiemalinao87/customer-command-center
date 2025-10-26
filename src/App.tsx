@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BarChart3, Calendar, Moon, Sun, Users, Shield, LogOut, Activity, UserCheck, BarChart2, FileText, Database, Book } from 'lucide-react';
+import { BarChart3, Calendar, Moon, Sun, Users, Shield, LogOut, Activity, UserCheck, BarChart2, FileText, Database, Book, Webhook } from 'lucide-react';
 import { PerformanceDashboard } from './features/dashboard';
 import { Visitors } from './features/visitors';
 import { UserActivity } from './features/user-activity/components/UserActivity';
@@ -8,12 +8,13 @@ import { ApiMonitoring } from './features/api-monitoring/components/ApiMonitorin
 import { ActivityLogs } from './features/activity-logs/components/ActivityLogs';
 import { CacheSystem } from './features/cache-system/components/CacheSystem';
 import { Documentation } from './features/documentation';
+import { WebhookAnalytics } from './features/webhook-analytics';
 import { AdminDashboard } from './components/AdminDashboard';
 import { Login } from './components/Login';
 import { useSettings } from './shared/components/ui/Settings';
 import { supabase, getCurrentUser } from './lib/supabase';
 
-type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'cache-system' | 'documentation' | 'admin';
+type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'admin';
 
 function App() {
   const [currentView, setCurrentView] = useState<View>('dashboard');
@@ -213,6 +214,17 @@ function App() {
                   Docs
                 </button>
                 <button
+                  onClick={() => setCurrentView('webhook-analytics')}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
+                    currentView === 'webhook-analytics'
+                      ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
+                  }`}
+                >
+                  <Webhook className="w-4 h-4" />
+                  Webhooks
+                </button>
+                <button
                   onClick={() => setCurrentView('admin')}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
                     currentView === 'admin'
@@ -303,6 +315,10 @@ function App() {
 
           {currentView === 'documentation' && (
             <Documentation />
+          )}
+
+          {currentView === 'webhook-analytics' && (
+            <WebhookAnalytics />
           )}
 
           {currentView === 'admin' && (
