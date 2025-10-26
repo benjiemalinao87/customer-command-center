@@ -45,7 +45,8 @@ export function WebhookAnalytics() {
 
   useEffect(() => {
     fetchWebhookMetrics();
-    const interval = setInterval(fetchWebhookMetrics, 30000); // Refresh every 30 seconds
+    // Auto-refresh every 5 minutes instead of 30 seconds to reduce page refreshing
+    const interval = setInterval(fetchWebhookMetrics, 300000); // Refresh every 5 minutes
     return () => clearInterval(interval);
   }, [timeRange]);
 
