@@ -7,7 +7,7 @@
 import { getAccessToken } from './supabase';
 
 // Backend URL - update this to match your deepseek-test-livechat backend
-const ADMIN_API_BASE_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:4000/api/admin';
+const ADMIN_API_BASE_URL = import.meta.env.VITE_ADMIN_API_URL || 'https://cc.automate8.com/api/admin';
 
 /**
  * Get JWT token from Supabase auth
