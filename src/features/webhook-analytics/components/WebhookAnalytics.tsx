@@ -157,6 +157,20 @@ export function WebhookAnalytics() {
                 <Zap className="w-5 h-5 text-purple-600" />
                 Processing Time Distribution
               </h3>
+              
+              {/* Explanation */}
+              <div className="mb-4 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                <p className="text-xs text-purple-800 dark:text-purple-300 leading-relaxed">
+                  <strong>Percentiles explained:</strong> These show how fast your webhooks process requests.
+                  <br />
+                  • <strong>P50 (Median):</strong> 50% of requests complete within this time
+                  <br />
+                  • <strong>P95:</strong> 95% of requests complete within this time
+                  <br />
+                  • <strong>P99:</strong> 99% of requests complete within this time (slowest 1%)
+                </p>
+              </div>
+
               <div className="space-y-4">
                 <PercentileBar
                   label="P50 (Median)"
@@ -223,6 +237,9 @@ export function WebhookAnalytics() {
                       Webhook Name
                     </th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Workspace
+                    </th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
                       Requests
                     </th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
@@ -254,6 +271,11 @@ export function WebhookAnalytics() {
                             {webhook.webhook_id}
                           </div>
                         </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                          {webhook.workspace_id}
+                        </span>
                       </td>
                       <td className="py-3 px-4 text-gray-700 dark:text-gray-300">
                         {webhook.metrics.total_requests.toLocaleString()}
