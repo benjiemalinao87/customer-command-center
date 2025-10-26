@@ -42,20 +42,22 @@ export function WebhookAnalytics() {
   const [loading, setLoading] = useState(true);
   const [selectedWebhook, setSelectedWebhook] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<'1h' | '24h' | '7d' | '30d'>('24h');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'cloudflare' | 'nodejs'>('all');
 
   useEffect(() => {
     fetchWebhookMetrics();
     // Auto-refresh every 5 minutes instead of 30 seconds to reduce page refreshing
     const interval = setInterval(fetchWebhookMetrics, 300000); // Refresh every 5 minutes
     return () => clearInterval(interval);
-  }, [timeRange]);
+  }, [timeRange, sourceFilter]);
 
   const fetchWebhookMetrics = async () => {
     try {
       setLoading(true);
       // Fetch from backend API
       const apiUrl = import.meta.env.VITE_API_URL || 'https://cc.automate8.com';
-      const response = await fetch(`${apiUrl}/api/webhook-analytics?range=${timeRange}`);
+      const sourceParam = sourceFilter !== 'all' ? `&source=${sourceFilter}` : '';
+      const response = await fetch(`${apiUrl}/api/webhook-analytics?range=${timeRange}${sourceParam}`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -108,6 +110,23 @@ export function WebhookAnalytics() {
             }`}
           >
             {range === '1h' ? 'Last Hour' : range === '24h' ? 'Last 24 Hours' : range === '7d' ? 'Last 7 Days' : 'Last 30 Days'}
+          </button>
+        ))}
+      </div>
+
+      {/* Source Filter Selector */}
+      <div className="flex gap-2">
+        {(['all', 'cloudflare', 'nodejs'] as const).map((source) => (
+          <button
+            key={source}
+            onClick={() => setSourceFilter(source)}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              sourceFilter === source
+                ? 'bg-green-600 text-white'
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+            }`}
+          >
+            {source === 'all' ? 'All Sources' : source === 'cloudflare' ? '☁️ Cloudflare' : '🟢 Node.js'}
           </button>
         ))}
       </div>
@@ -241,6 +260,9 @@ export function WebhookAnalytics() {
                       Workspace
                     </th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Source
+                    </th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
                       Requests
                     </th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
@@ -277,6 +299,24 @@ export function WebhookAnalytics() {
                         <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
                           {webhook.workspace_id}
                         </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex flex-col gap-1">
+                          {webhook.source_breakdown && Object.entries(webhook.source_breakdown).map(([source, count]) => (
+                            <span
+                              key={source}
+                              className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${
+                                source === 'cloudflare' 
+                                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
+                                  : source === 'nodejs'
+                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                                  : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                              }`}
+                            >
+                              {source === 'cloudflare' ? '☁️ Cloudflare' : source === 'nodejs' ? '🟢 Node.js' : '❓ Unknown'} ({count})
+                            </span>
+                          ))}
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-gray-700 dark:text-gray-300">
                         {webhook.metrics.total_requests.toLocaleString()}
