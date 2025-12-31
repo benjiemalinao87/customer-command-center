@@ -1,20 +1,26 @@
 import { useState, useEffect } from 'react';
-import { BarChart3, Calendar, Moon, Sun, Users, Shield, LogOut, Activity, UserCheck, BarChart2, FileText, Database, Book, Webhook } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import { PerformanceDashboard } from './features/dashboard';
 import { Visitors } from './features/visitors';
 import { UserActivity } from './features/user-activity/components/UserActivity';
 import { UserDetails } from './features/user-details/components/UserDetails';
 import { ApiMonitoring } from './features/api-monitoring/components/ApiMonitoring';
 import { ActivityLogs } from './features/activity-logs/components/ActivityLogs';
+import { MessageErrorLogs } from './features/message-error-logs';
 import { CacheSystem } from './features/cache-system/components/CacheSystem';
 import { Documentation } from './features/documentation';
 import { WebhookAnalytics } from './features/webhook-analytics';
+import { AnalyticsDashboard } from './features/connection-analytics/AnalyticsDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
+import { DeveloperMode } from './features/developer-mode';
 import { Login } from './components/Login';
+import { Sidebar } from './components/Sidebar';
 import { useSettings } from './shared/components/ui/Settings';
 import { supabase, getCurrentUser } from './lib/supabase';
+import { connectionAnalytics } from './services/connectionAnalytics';
+import { tokenRefreshTracker } from './services/tokenRefreshTracker';
 
-type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'admin';
+type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'message-error-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode';
 
 function App() {
   const [currentView, setCurrentView] = useState<View>('dashboard');
@@ -40,6 +46,13 @@ function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsAuthenticated(!!session);
       setUserEmail(session?.user?.email || null);
+
+      // Initialize analytics services with user context
+      if (session?.user) {
+        connectionAnalytics.initialize(null, session.user.id);
+        tokenRefreshTracker.initialize(session.user.id);
+        console.log('[Analytics] Initialized for user:', session.user.id);
+      }
     });
 
     return () => {
@@ -62,6 +75,13 @@ function App() {
       const user = await getCurrentUser();
       setIsAuthenticated(!!user);
       setUserEmail(user?.email || null);
+
+      // Initialize analytics services with user context
+      if (user) {
+        connectionAnalytics.initialize(null, user.id);
+        tokenRefreshTracker.initialize(user.id);
+        console.log('[Analytics] Initialized for user:', user.id);
+      }
     } catch (error) {
       console.error('Auth check failed:', error);
       setIsAuthenticated(false);
@@ -104,156 +124,21 @@ function App() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900 overflow-hidden">
-      {/* Fixed Header */}
-      <nav className="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center gap-3">
-            </div>
+    <div className="h-screen flex bg-gray-50 dark:bg-gray-900 overflow-hidden">
+      {/* Left Sidebar */}
+      <Sidebar
+        currentView={currentView}
+        onViewChange={setCurrentView}
+        darkMode={darkMode}
+        onToggleDarkMode={toggleDarkMode}
+        onLogout={handleLogout}
+        userEmail={userEmail}
+      />
 
-            <div className="flex items-center gap-4">
-              {/* User Email Display */}
-              {userEmail && (
-                <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                  <Shield className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {userEmail}
-                  </span>
-                </div>
-              )}
-
-              {/* Premium Segmented Control Navigation */}
-              <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1 overflow-x-auto max-w-2xl">
-                <button
-                  onClick={() => setCurrentView('dashboard')}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
-                    currentView === 'dashboard'
-                      ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
-                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
-                  }`}
-                >
-                  <BarChart3 className="w-4 h-4" />
-                  Dashboard
-                </button>
-                <button
-                  onClick={() => setCurrentView('user-activity')}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
-                    currentView === 'user-activity'
-                      ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
-                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
-                  }`}
-                >
-                  <Activity className="w-4 h-4" />
-                  Activity
-                </button>
-                <button
-                  onClick={() => setCurrentView('user-details')}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
-                    currentView === 'user-details'
-                      ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
-                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
-                  }`}
-                >
-                  <UserCheck className="w-4 h-4" />
-                  Users
-                </button>
-                <button
-                  onClick={() => setCurrentView('api-monitoring')}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
-                    currentView === 'api-monitoring'
-                      ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
-                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
-                  }`}
-                >
-                  <BarChart2 className="w-4 h-4" />
-                  API
-                </button>
-                <button
-                  onClick={() => setCurrentView('visitors')}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
-                    currentView === 'visitors'
-                      ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
-                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
-                  }`}
-                >
-                  <Users className="w-4 h-4" />
-                  Logins
-                </button>
-                <button
-                  onClick={() => setCurrentView('activity-logs')}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
-                    currentView === 'activity-logs'
-                      ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
-                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
-                  }`}
-                >
-                  <FileText className="w-4 h-4" />
-                  Logs
-                </button>
-                <button
-                  onClick={() => setCurrentView('cache-system')}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
-                    currentView === 'cache-system'
-                      ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
-                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
-                  }`}
-                >
-                  <Database className="w-4 h-4" />
-                  Cache
-                </button>
-                <button
-                  onClick={() => setCurrentView('documentation')}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
-                    currentView === 'documentation'
-                      ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
-                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
-                  }`}
-                >
-                  <Book className="w-4 h-4" />
-                  Docs
-                </button>
-                <button
-                  onClick={() => setCurrentView('webhook-analytics')}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
-                    currentView === 'webhook-analytics'
-                      ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
-                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
-                  }`}
-                >
-                  <Webhook className="w-4 h-4" />
-                  Webhooks
-                </button>
-                <button
-                  onClick={() => setCurrentView('admin')}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-md font-medium transition-colors whitespace-nowrap text-sm ${
-                    currentView === 'admin'
-                      ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
-                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100'
-                  }`}
-                >
-                  <Shield className="w-4 h-4" />
-                  Admin
-                </button>
-              </div>
-
-              {/* Logout Button */}
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors"
-                title="Sign out"
-              >
-                <LogOut className="w-4 h-4" />
-                <span className="hidden sm:inline">Sign Out</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      {/* Scrollable Content Area */}
-      <main className="flex-1 overflow-y-auto">
-        <div className={`${settings.wideLayout ? 'max-w-none' : 'max-w-7xl'} mx-auto px-4 sm:px-6 lg:px-8 py-8 transition-all duration-300`}>
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
+          <div className={`${settings.wideLayout ? 'max-w-none' : 'max-w-7xl'} mx-auto px-4 sm:px-6 lg:px-8 py-8 transition-all duration-300`}>
           {currentView === 'dashboard' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
@@ -309,6 +194,10 @@ function App() {
             <ActivityLogs />
           )}
 
+          {currentView === 'message-error-logs' && (
+            <MessageErrorLogs />
+          )}
+
           {currentView === 'cache-system' && (
             <CacheSystem />
           )}
@@ -321,21 +210,20 @@ function App() {
             <WebhookAnalytics />
           )}
 
+          {currentView === 'connection-analytics' && (
+            <AnalyticsDashboard />
+          )}
+
+          {currentView === 'developer-mode' && (
+            <DeveloperMode />
+          )}
+
           {currentView === 'admin' && (
             <AdminDashboard />
           )}
+          </div>
         </div>
       </main>
-
-      {/* Floating Dark Mode Toggle */}
-      <button
-        onClick={toggleDarkMode}
-        className="fixed bottom-6 right-6 p-3 rounded-full bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 shadow-lg hover:shadow-xl border border-gray-200 dark:border-gray-700 hover:scale-110 transition-all duration-200 z-50"
-        aria-label="Toggle dark mode"
-        type="button"
-      >
-        {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-      </button>
     </div>
   );
 }
