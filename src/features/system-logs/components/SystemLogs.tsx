@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Search, RefreshCw, ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
-  Info, AlertTriangle, AlertCircle, Phone, Mail, 
+  AlertTriangle, AlertCircle, Phone, Mail, 
   MessageSquare
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
@@ -213,13 +213,6 @@ export function SystemLogs() {
 
   const getLevelBadge = (level: string) => {
     switch (level) {
-      case 'INFO':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20">
-            <Info className="w-3.5 h-3.5" />
-            INFO
-          </span>
-        );
       case 'WARN':
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
@@ -294,33 +287,7 @@ export function SystemLogs() {
       </div>
 
       {/* Stats Cards with Percentages */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <button
-          onClick={() => handleLevelFilter('INFO')}
-          className={`bg-white dark:bg-gray-800 rounded-xl border p-4 transition-all hover:shadow-md ${
-            filterLevel === 'INFO'
-              ? 'border-blue-500 dark:border-blue-400 shadow-md'
-              : 'border-gray-200 dark:border-gray-700'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                <Info className="w-5 h-5 text-green-600 dark:text-green-400" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">INFO</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.info}</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-sm font-semibold text-green-600 dark:text-green-400">
-                {stats.infoPercent}%
-              </p>
-            </div>
-          </div>
-        </button>
-
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <button
           onClick={() => handleLevelFilter('WARN')}
           className={`bg-white dark:bg-gray-800 rounded-xl border p-4 transition-all hover:shadow-md ${
@@ -413,7 +380,6 @@ export function SystemLogs() {
             className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white text-sm rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All Levels</option>
-            <option value="INFO">INFO</option>
             <option value="WARN">WARN</option>
             <option value="ERROR">ERROR</option>
           </select>
