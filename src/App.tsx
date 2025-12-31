@@ -7,6 +7,7 @@ import { UserDetails } from './features/user-details/components/UserDetails';
 import { ApiMonitoring } from './features/api-monitoring/components/ApiMonitoring';
 import { ActivityLogs } from './features/activity-logs/components/ActivityLogs';
 import { MessageErrorLogs } from './features/message-error-logs';
+import { SystemLogs } from './features/system-logs';
 import { CacheSystem } from './features/cache-system/components/CacheSystem';
 import { Documentation } from './features/documentation';
 import { WebhookAnalytics } from './features/webhook-analytics';
@@ -20,7 +21,7 @@ import { supabase, getCurrentUser } from './lib/supabase';
 import { connectionAnalytics } from './services/connectionAnalytics';
 import { tokenRefreshTracker } from './services/tokenRefreshTracker';
 
-type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'message-error-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode';
+type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'message-error-logs' | 'system-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode';
 
 function App() {
   const [currentView, setCurrentView] = useState<View>('dashboard');
@@ -196,6 +197,10 @@ function App() {
 
           {currentView === 'message-error-logs' && (
             <MessageErrorLogs />
+          )}
+
+          {currentView === 'system-logs' && (
+            <SystemLogs />
           )}
 
           {currentView === 'cache-system' && (

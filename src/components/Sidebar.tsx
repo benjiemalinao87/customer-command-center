@@ -1,7 +1,7 @@
-import { BarChart3, Activity, UserCheck, BarChart2, Users, FileText, Database, Book, Webhook, TrendingUp, Code, Shield, LogOut, Moon, Sun, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { BarChart3, Activity, UserCheck, BarChart2, Users, FileText, Database, Book, Webhook, TrendingUp, Code, Shield, LogOut, Moon, Sun, ChevronLeft, ChevronRight, AlertTriangle, ScrollText } from 'lucide-react';
 import { useState } from 'react';
 
-type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'message-error-logs';
+type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'message-error-logs' | 'system-logs';
 
 interface SidebarProps {
   currentView: View;
@@ -21,7 +21,8 @@ export function Sidebar({ currentView, onViewChange, darkMode, onToggleDarkMode,
     { id: 'user-details' as View, icon: UserCheck, label: 'Users' },
     { id: 'api-monitoring' as View, icon: BarChart2, label: 'API' },
     { id: 'visitors' as View, icon: Users, label: 'Logins' },
-    { id: 'activity-logs' as View, icon: FileText, label: 'Logs' },
+    { id: 'activity-logs' as View, icon: FileText, label: 'Audit Logs' },
+    { id: 'system-logs' as View, icon: ScrollText, label: 'System Logs' },
     { id: 'message-error-logs' as View, icon: AlertTriangle, label: 'Msg Errors' },
     { id: 'cache-system' as View, icon: Database, label: 'Cache' },
     { id: 'documentation' as View, icon: Book, label: 'Docs' },
