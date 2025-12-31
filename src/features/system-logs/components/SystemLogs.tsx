@@ -117,16 +117,16 @@ export function SystemLogs() {
       const total = allLogs.length;
       const info = allLogs.filter((l: any) => l.level === 'INFO').length;
       const warn = allLogs.filter((l: any) => l.level === 'WARN').length;
-      const error = allLogs.filter((l: any) => l.level === 'ERROR').length;
+      const errorCount = allLogs.filter((l: any) => l.level === 'ERROR').length;
 
       setStats({
         total,
         info,
         warn,
-        error,
+        error: errorCount,
         infoPercent: total > 0 ? Math.round((info / total) * 100) : 0,
         warnPercent: total > 0 ? Math.round((warn / total) * 100) : 0,
-        errorPercent: total > 0 ? Math.round((error / total) * 100) : 0
+        errorPercent: total > 0 ? Math.round((errorCount / total) * 100) : 0
       });
     } catch (error) {
       console.error('Error loading stats:', error);
