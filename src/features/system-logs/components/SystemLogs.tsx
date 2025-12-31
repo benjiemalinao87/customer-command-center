@@ -403,6 +403,21 @@ export function SystemLogs() {
             ))}
           </select>
 
+          {/* Level Filter */}
+          <select
+            value={filterLevel}
+            onChange={(e) => {
+              setFilterLevel(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white text-sm rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All Levels</option>
+            <option value="INFO">INFO</option>
+            <option value="WARN">WARN</option>
+            <option value="ERROR">ERROR</option>
+          </select>
+
           {/* Category Filter */}
           <select
             value={filterCategory}
