@@ -1,13 +1,13 @@
 /**
  * System Logs Component
- * Unified view of system activities (SMS, Email, etc.) matching the provided design.
+ * Unified view of system activities (SMS, Email, etc.) with stats and pagination
  */
 
 import React, { useState, useEffect } from 'react';
 import { 
-  Filter, Search, RefreshCw, ChevronDown, ChevronUp, 
+  Search, RefreshCw, ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
   Info, AlertTriangle, AlertCircle, Phone, Mail, 
-  MessageSquare, ArrowUpRight, ArrowDownLeft 
+  MessageSquare
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 
@@ -23,68 +23,152 @@ interface SystemLog {
   source_type: string;
 }
 
+interface LogStats {
+  total: number;
+  info: number;
+  warn: number;
+  error: number;
+  infoPercent: number;
+  warnPercent: number;
+  errorPercent: number;
+}
+
 export function SystemLogs() {
   const [logs, setLogs] = useState<SystemLog[]>([]);
+  const [stats, setStats] = useState<LogStats>({
+    total: 0,
+    info: 0,
+    warn: 0,
+    error: 0,
+    infoPercent: 0,
+    warnPercent: 0,
+    errorPercent: 0
+  });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterLevel, setFilterLevel] = useState<string>('');
   const [filterCategory, setFilterCategory] = useState<string>('');
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
-  const [limit, setLimit] = useState(50);
-  const [dateRange, setDateRange] = useState('24h');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [dateRange, setDateRange] = useState('today');
+  const pageSize = 20;
 
   useEffect(() => {
+    loadStats();
     loadLogs();
-  }, [filterLevel, filterCategory, limit, dateRange]);
+  }, [filterLevel, filterCategory, dateRange, currentPage]);
+
+  // Calculate date range start time
+  const getDateRangeStart = (range: string): Date => {
+    const now = new Date();
+    const start = new Date();
+    
+    switch (range) {
+      case 'today':
+        start.setHours(0, 0, 0, 0);
+        break;
+      case 'yesterday':
+        start.setDate(now.getDate() - 1);
+        start.setHours(0, 0, 0, 0);
+        break;
+      case '2days':
+        start.setDate(now.getDate() - 2);
+        start.setHours(0, 0, 0, 0);
+        break;
+      case '7days':
+        start.setDate(now.getDate() - 7);
+        break;
+      case '1month':
+        start.setMonth(now.getMonth() - 1);
+        break;
+      case '3months':
+        start.setMonth(now.getMonth() - 3);
+        break;
+      default:
+        start.setHours(0, 0, 0, 0);
+    }
+    
+    return start;
+  };
+
+  const loadStats = async () => {
+    try {
+      const startTime = getDateRangeStart(dateRange);
+      
+      let query = supabase
+        .from('system_logs_view')
+        .select('level', { count: 'exact' })
+        .gte('timestamp', startTime.toISOString());
+
+      if (filterCategory) {
+        query = query.ilike('category', `%${filterCategory}%`);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error loading stats:', error);
+        return;
+      }
+
+      const allLogs = data || [];
+      const total = allLogs.length;
+      const info = allLogs.filter((l: any) => l.level === 'INFO').length;
+      const warn = allLogs.filter((l: any) => l.level === 'WARN').length;
+      const error = allLogs.filter((l: any) => l.level === 'ERROR').length;
+
+      setStats({
+        total,
+        info,
+        warn,
+        error,
+        infoPercent: total > 0 ? Math.round((info / total) * 100) : 0,
+        warnPercent: total > 0 ? Math.round((warn / total) * 100) : 0,
+        errorPercent: total > 0 ? Math.round((error / total) * 100) : 0
+      });
+    } catch (error) {
+      console.error('Error loading stats:', error);
+    }
+  };
 
   const loadLogs = async () => {
     try {
       setLoading(true);
+      const startTime = getDateRangeStart(dateRange);
+      const offset = (currentPage - 1) * pageSize;
       
       let query = supabase
         .from('system_logs_view')
-        .select('*')
+        .select('*', { count: 'exact' })
+        .gte('timestamp', startTime.toISOString())
         .order('timestamp', { ascending: false })
-        .limit(limit);
+        .range(offset, offset + pageSize - 1);
 
       if (filterLevel) {
         query = query.eq('level', filterLevel);
       }
 
       if (filterCategory) {
-        // Simple partial match or exact match depending on UI needs
-        // For now, let's assume exact match if selected from dropdown
         query = query.ilike('category', `%${filterCategory}%`);
       }
 
-      // Date range filtering
-      if (dateRange !== 'all') {
-        const now = new Date();
-        let startTime = new Date();
-        
-        switch (dateRange) {
-          case '1h': startTime.setHours(now.getHours() - 1); break;
-          case '24h': startTime.setHours(now.getHours() - 24); break;
-          case '7d': startTime.setDate(now.getDate() - 7); break;
-          case '30d': startTime.setDate(now.getDate() - 30); break;
-        }
-        
-        query = query.gte('timestamp', startTime.toISOString());
-      }
-
-      const { data, error } = await query;
+      const { data, error, count } = await query;
 
       if (error) {
         console.error('Error loading system logs:', error);
         setLogs([]);
+        setTotalCount(0);
         return;
       }
 
       setLogs(data || []);
+      setTotalCount(count || 0);
     } catch (error) {
       console.error('Error loading system logs:', error);
       setLogs([]);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
@@ -92,8 +176,18 @@ export function SystemLogs() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await loadLogs();
+    await Promise.all([loadStats(), loadLogs()]);
     setRefreshing(false);
+  };
+
+  const handleDateRangeChange = (newRange: string) => {
+    setDateRange(newRange);
+    setCurrentPage(1); // Reset to first page when changing date range
+  };
+
+  const handleLevelFilter = (level: string) => {
+    setFilterLevel(filterLevel === level ? '' : level);
+    setCurrentPage(1); // Reset to first page when changing filter
   };
 
   const toggleDetails = (id: string) => {
@@ -106,7 +200,6 @@ export function SystemLogs() {
 
   const formatDate = (dateString: string): string => {
     if (!dateString) return 'N/A';
-    // Format: 01/01/2026, 8:05:11 am
     return new Date(dateString).toLocaleString('en-US', {
       year: 'numeric',
       month: '2-digit',
@@ -154,7 +247,7 @@ export function SystemLogs() {
     if (category.includes('SMS') || category.includes('TEXT')) return <MessageSquare className="w-4 h-4" />;
     if (category.includes('EMAIL')) return <Mail className="w-4 h-4" />;
     if (category.includes('CALL')) return <Phone className="w-4 h-4" />;
-    return <RefreshCw className="w-4 h-4" />;
+    return <MessageSquare className="w-4 h-4" />;
   };
 
   // Client-side search filtering
@@ -177,6 +270,19 @@ export function SystemLogs() {
     { value: 'OUTBOUND', label: 'Outbound' }
   ];
 
+  const dateRangeOptions = [
+    { value: 'today', label: 'Today' },
+    { value: 'yesterday', label: 'Yesterday' },
+    { value: '2days', label: '2 Days' },
+    { value: '7days', label: 'Last 7 Days' },
+    { value: '1month', label: '1 Month' },
+    { value: '3months', label: '3 Months' }
+  ];
+
+  const totalPages = Math.ceil(totalCount / pageSize);
+  const startRecord = totalCount > 0 ? (currentPage - 1) * pageSize + 1 : 0;
+  const endRecord = Math.min(currentPage * pageSize, totalCount);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -185,6 +291,87 @@ export function SystemLogs() {
         <p className="text-gray-600 dark:text-gray-400 mt-1">
           Unified view of system activities, messages, and errors
         </p>
+      </div>
+
+      {/* Stats Cards with Percentages */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <button
+          onClick={() => handleLevelFilter('INFO')}
+          className={`bg-white dark:bg-gray-800 rounded-xl border p-4 transition-all hover:shadow-md ${
+            filterLevel === 'INFO'
+              ? 'border-blue-500 dark:border-blue-400 shadow-md'
+              : 'border-gray-200 dark:border-gray-700'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <Info className="w-5 h-5 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">INFO</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.info}</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-semibold text-green-600 dark:text-green-400">
+                {stats.infoPercent}%
+              </p>
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => handleLevelFilter('WARN')}
+          className={`bg-white dark:bg-gray-800 rounded-xl border p-4 transition-all hover:shadow-md ${
+            filterLevel === 'WARN'
+              ? 'border-yellow-500 dark:border-yellow-400 shadow-md'
+              : 'border-gray-200 dark:border-gray-700'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
+                <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">WARN</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.warn}</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-semibold text-yellow-600 dark:text-yellow-400">
+                {stats.warnPercent}%
+              </p>
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => handleLevelFilter('ERROR')}
+          className={`bg-white dark:bg-gray-800 rounded-xl border p-4 transition-all hover:shadow-md ${
+            filterLevel === 'ERROR'
+              ? 'border-red-500 dark:border-red-400 shadow-md'
+              : 'border-gray-200 dark:border-gray-700'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
+                <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">ERROR</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.error}</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-semibold text-red-600 dark:text-red-400">
+                {stats.errorPercent}%
+              </p>
+            </div>
+          </div>
+        </button>
       </div>
 
       {/* Filters Bar */}
@@ -208,32 +395,21 @@ export function SystemLogs() {
           {/* Time Range */}
           <select
             value={dateRange}
-            onChange={(e) => setDateRange(e.target.value)}
+            onChange={(e) => handleDateRangeChange(e.target.value)}
             className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white text-sm rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="1h">Last Hour</option>
-            <option value="24h">Last 24 Hours</option>
-            <option value="7d">Last 7 Days</option>
-            <option value="30d">Last 30 Days</option>
-            <option value="all">All Time</option>
-          </select>
-
-          {/* Level Filter */}
-          <select
-            value={filterLevel}
-            onChange={(e) => setFilterLevel(e.target.value)}
-            className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white text-sm rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All Levels</option>
-            <option value="INFO">INFO</option>
-            <option value="WARN">WARN</option>
-            <option value="ERROR">ERROR</option>
+            {dateRangeOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
           </select>
 
           {/* Category Filter */}
           <select
             value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
+            onChange={(e) => {
+              setFilterCategory(e.target.value);
+              setCurrentPage(1);
+            }}
             className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white text-sm rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
           >
             {categories.map(cat => (
@@ -269,7 +445,7 @@ export function SystemLogs() {
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {loading ? (
                 // Loading Skeleton
-                [...Array(5)].map((_, i) => (
+                [...Array(pageSize)].map((_, i) => (
                   <tr key={i} className="animate-pulse">
                     <td className="px-6 py-4"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-32"></div></td>
                     <td className="px-6 py-4"><div className="h-6 bg-gray-200 dark:bg-gray-700 rounded-full w-16"></div></td>
@@ -381,22 +557,35 @@ export function SystemLogs() {
           </table>
         </div>
         
-        {/* Pagination Footer (Simple) */}
+        {/* Pagination Footer */}
         <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50/50 dark:bg-gray-900/50">
           <span className="text-sm text-gray-500 dark:text-gray-400">
-            Showing recent {filteredLogs.length} logs
+            Showing {startRecord} to {endRecord} of {totalCount} logs
           </span>
           
-          <select
-            value={limit}
-            onChange={(e) => setLimit(parseInt(e.target.value))}
-            className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm rounded-lg px-2 py-1 outline-none"
-          >
-            <option value={50}>50 rows</option>
-            <option value={100}>100 rows</option>
-            <option value={200}>200 rows</option>
-            <option value={500}>500 rows</option>
-          </select>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1 || loading}
+              className="p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Previous Page"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            
+            <span className="text-sm text-gray-600 dark:text-gray-400 px-3">
+              Page {currentPage} of {totalPages || 1}
+            </span>
+            
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage >= totalPages || loading}
+              className="p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Next Page"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
