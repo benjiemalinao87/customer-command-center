@@ -36,15 +36,15 @@ SELECT
 FROM livechat_messages lm
 LEFT JOIN contacts c ON lm.contact_id = c.id
 WHERE 
-  -- Exclude internal notes and comments
-  (lm.is_internal IS NULL OR lm.is_internal = false)
-  AND lm.msg_type NOT IN ('note', 'comment', 'internal_note')
+  -- Exclude internal notes (system-generated metadata)
+  (lm.msg_type != 'internal_note' OR lm.msg_type IS NULL)
+  AND (lm.is_internal != true OR lm.is_internal IS NULL)
   -- Only include actual SMS, MMS, and Email messages
-  AND lm.msg_type IN ('text', 'mms', 'EMAIL');
+  AND lm.msg_type IN ('text', 'mms', 'MMS', 'EMAIL', 'email', 'sms', 'SMS');
 
 -- Grant access to the view
 GRANT SELECT ON system_logs_view TO service_role;
 GRANT SELECT ON system_logs_view TO authenticated;
 GRANT SELECT ON system_logs_view TO anon;
 
-COMMENT ON VIEW system_logs_view IS 'Unified system logs for SMS and Email activities (successes and failures)';
+COMMENT ON VIEW system_logs_view IS 'Unified system logs for SMS and Email activities (excludes internal notes)';
