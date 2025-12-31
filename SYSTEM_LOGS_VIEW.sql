@@ -34,7 +34,13 @@ SELECT
   ) as metadata,
   'livechat' as source_type
 FROM livechat_messages lm
-LEFT JOIN contacts c ON lm.contact_id = c.id;
+LEFT JOIN contacts c ON lm.contact_id = c.id
+WHERE 
+  -- Exclude internal notes and comments
+  (lm.is_internal IS NULL OR lm.is_internal = false)
+  AND lm.msg_type NOT IN ('note', 'comment', 'internal_note')
+  -- Only include actual SMS, MMS, and Email messages
+  AND lm.msg_type IN ('text', 'mms', 'EMAIL');
 
 -- Grant access to the view
 GRANT SELECT ON system_logs_view TO service_role;
