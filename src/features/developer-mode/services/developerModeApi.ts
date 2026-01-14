@@ -16,14 +16,17 @@ import type {
   DeveloperApplication,
   ConnectorSubmission,
   DeveloperWorkspace,
-  RevenueStats
+  RevenueStats,
+  ConnectorTemplate,
+  CreateConnectorTemplateData,
+  UpdateConnectorTemplateData
 } from '../types/developerMode';
 
 /**
  * Admin API Base URL - Cloudflare Worker endpoint
  * This connects to the dedicated admin-api worker for Developer Mode management
  */
-const ADMIN_API_BASE_URL = import.meta.env.VITE_DEVELOPER_MODE_API_URL || 'https://admin-api.benjiemalinao879557.workers.dev';
+const ADMIN_API_BASE_URL = import.meta.env.VITE_ADMIN_API_URL || 'https://admin-api.benjiemalinao879557.workers.dev';
 
 /**
  * API Response Types
@@ -487,6 +490,180 @@ export const developerModeApi = {
       `/admin-api/connectors/${connectorId}/unsuspend`,
       {
         method: 'POST',
+      }
+    );
+    return response.data;
+  },
+
+  /**
+   * ============================================================================
+   * OFFICIAL CONNECTOR TEMPLATES API METHODS
+   * ============================================================================
+   */
+
+  /**
+   * Get list of official connector templates
+   *
+   * Fetches all official connectors created by admins.
+   * Used by ConnectorManagement component to display the list.
+   *
+   * @param category - Optional filter by category
+   * @param search - Optional search term
+   * @param page - Page number for pagination (default: 1)
+   * @param limit - Number of items per page (default: 20)
+   * @returns Promise resolving to array of ConnectorTemplate objects
+   *
+   * Backend Endpoint: GET /admin-api/connector-templates
+   */
+  getOfficialConnectors: async (
+    category?: string,
+    search?: string,
+    page: number = 1,
+    limit: number = 20
+  ): Promise<{ connectors: ConnectorTemplate[]; pagination: ApiResponse<any>['pagination'] }> => {
+    const params = new URLSearchParams();
+    if (category) params.append('category', category);
+    if (search) params.append('search', search);
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+
+    const query = params.toString() ? `?${params}` : '';
+    const response = await makeAdminRequest<ApiResponse<ConnectorTemplate[]>>(`/connector-templates${query}`);
+
+    return {
+      connectors: response.data || [],
+      pagination: response.pagination
+    };
+  },
+
+  /**
+   * Get a single official connector template by ID
+   *
+   * @param connectorId - The connector template ID to fetch
+   * @returns Promise resolving to ConnectorTemplate object
+   *
+   * Backend Endpoint: GET /admin-api/connector-templates/:id
+   */
+  getOfficialConnector: async (connectorId: string): Promise<ConnectorTemplate> => {
+    const response = await makeAdminRequest<ApiResponse<ConnectorTemplate>>(`/connector-templates/${connectorId}`);
+    return response.data;
+  },
+
+  /**
+   * Create a new official connector template
+   *
+   * Creates a new connector template that will be published directly
+   * to the marketplace with is_official flag and approved status.
+   *
+   * @param connectorData - The connector data to create
+   * @returns Promise resolving to the created ConnectorTemplate
+   *
+   * Backend Endpoint: POST /admin-api/connector-templates
+   */
+  createOfficialConnector: async (connectorData: CreateConnectorTemplateData): Promise<ConnectorTemplate> => {
+    const response = await makeAdminRequest<ApiResponse<ConnectorTemplate>>(
+      '/connector-templates',
+      {
+        method: 'POST',
+        body: JSON.stringify(connectorData),
+      }
+    );
+    return response.data;
+  },
+
+  /**
+   * Update an existing official connector template
+   *
+   * Updates an official connector template with the provided data.
+   *
+   * @param connectorId - The connector ID to update
+   * @param connectorData - The fields to update
+   * @returns Promise resolving to the updated ConnectorTemplate
+   *
+   * Backend Endpoint: PATCH /admin-api/connector-templates/:id
+   */
+  updateOfficialConnector: async (
+    connectorId: string,
+    connectorData: UpdateConnectorTemplateData
+  ): Promise<ConnectorTemplate> => {
+    const response = await makeAdminRequest<ApiResponse<ConnectorTemplate>>(
+      `/connector-templates/${connectorId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(connectorData),
+      }
+    );
+    return response.data;
+  },
+
+  /**
+   * Delete an official connector template
+   *
+   * Permanently deletes an official connector template.
+   * This should be used with caution as it cannot be undone.
+   *
+   * @param connectorId - The connector ID to delete
+   * @returns Promise that resolves when deletion is complete
+   *
+   * Backend Endpoint: DELETE /admin-api/connector-templates/:id
+   */
+  deleteOfficialConnector: async (connectorId: string): Promise<void> => {
+    await makeAdminRequest<ApiResponse<void>>(
+      `/connector-templates/${connectorId}`,
+      {
+        method: 'DELETE',
+      }
+    );
+  },
+
+  /**
+   * Test connector API configuration
+   *
+   * Makes a test API call with the provided connector configuration
+   * to verify it works correctly before saving.
+   *
+   * @param config - The connector configuration to test
+   * @param testData - Test input data for the API call
+   * @returns Promise resolving to the API response
+   *
+   * Backend Endpoint: POST /admin-api/connector-templates/test
+   */
+  testConnector: async (config: Record<string, unknown>, testData?: Record<string, unknown>): Promise<{
+    success: boolean;
+    response?: unknown;
+    error?: string;
+  }> => {
+    const response = await makeAdminRequest<ApiResponse<{
+      success: boolean;
+      response?: unknown;
+      error?: string;
+    }>>(
+      '/connector-templates/test',
+      {
+        method: 'POST',
+        body: JSON.stringify({ config, testData }),
+      }
+    );
+    return response.data;
+  },
+
+  /**
+   * Toggle visibility of an official connector
+   *
+   * Toggles the is_public flag to show/hide connector in marketplace.
+   *
+   * @param connectorId - The connector ID
+   * @param isPublic - Whether the connector should be public
+   * @returns Promise resolving to the updated ConnectorTemplate
+   *
+   * Backend Endpoint: PATCH /admin-api/connector-templates/:id/visibility
+   */
+  toggleConnectorVisibility: async (connectorId: string, isPublic: boolean): Promise<ConnectorTemplate> => {
+    const response = await makeAdminRequest<ApiResponse<ConnectorTemplate>>(
+      `/connector-templates/${connectorId}/visibility`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ is_public: isPublic }),
       }
     );
     return response.data;

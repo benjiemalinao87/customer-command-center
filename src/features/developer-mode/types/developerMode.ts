@@ -243,3 +243,186 @@ export interface RevenueStats {
   }>;
 }
 
+/**
+ * Connector Template Interface
+ * 
+ * Represents an official connector template created by admins.
+ * Official connectors bypass the review process and are immediately
+ * published to the marketplace with is_official flag.
+ * 
+ * @interface ConnectorTemplate
+ */
+export interface ConnectorTemplate {
+  /** Unique identifier for the connector template */
+  id: string;
+
+  /** Display name of the connector */
+  name: string;
+
+  /** Detailed description of what the connector does */
+  description: string;
+
+  /** Category for marketplace organization (e.g., "Data Enrichment", "Communication") */
+  category: string;
+
+  /** Emoji or icon identifier for visual representation */
+  icon: string;
+
+  /** Connector type (rest_api, webhook, database, etc.) */
+  type: string;
+
+  /** API configuration (method, url, headers, body, auth settings) */
+  config: Record<string, unknown>;
+
+  /** Input schema defining required credentials/parameters */
+  input_schema: Record<string, unknown>;
+
+  /** Field mappings for response data transformation */
+  field_mappings: Array<{
+    source_path: string;
+    target_field: string;
+    transform?: string;
+  }>;
+
+  /** Whether this is an official platform connector */
+  is_official: boolean;
+
+  /** Whether this connector is featured in the marketplace */
+  is_featured: boolean;
+
+  /** Whether this connector is publicly visible */
+  is_public: boolean;
+
+  /** Current status in the marketplace */
+  marketplace_status: 'draft' | 'approved' | 'rejected' | 'suspended';
+
+  /** Pricing model for the connector */
+  pricing_type: 'free' | 'one_time' | 'subscription';
+
+  /** Base price in USD (0 for free connectors) */
+  base_price: number;
+
+  /** Billing interval for subscription-based connectors */
+  subscription_interval?: 'monthly' | 'annual';
+
+  /** Tags for search and categorization */
+  tags: string[];
+
+  /** Number of times this connector has been installed */
+  install_count: number;
+
+  /** Average rating (0-5) */
+  rating: number;
+
+  /** Number of ratings */
+  rating_count: number;
+
+  /** Timeout in milliseconds for API calls */
+  timeout_ms?: number;
+
+  /** Maximum number of retry attempts */
+  max_retries?: number;
+
+  /** Whether to continue flow execution on connector error */
+  continue_on_error?: boolean;
+
+  /** Timestamp when connector was created */
+  created_at: string;
+
+  /** Timestamp when connector was last updated */
+  updated_at: string;
+}
+
+/**
+ * Create Connector Template Data
+ * 
+ * Data required to create a new official connector template.
+ * Used by the ConnectorBuilder form.
+ * 
+ * @interface CreateConnectorTemplateData
+ */
+export interface CreateConnectorTemplateData {
+  /** Display name of the connector */
+  name: string;
+
+  /** Detailed description */
+  description: string;
+
+  /** Category */
+  category: string;
+
+  /** Icon emoji */
+  icon: string;
+
+  /** Connector type */
+  type: string;
+
+  /** API configuration */
+  config: Record<string, unknown>;
+
+  /** Input schema */
+  input_schema: Record<string, unknown>;
+
+  /** Field mappings */
+  field_mappings: Array<{
+    source_path: string;
+    target_field: string;
+    transform?: string;
+  }>;
+
+  /** Pricing type */
+  pricing_type: 'free' | 'one_time' | 'subscription';
+
+  /** Base price */
+  base_price?: number;
+
+  /** Subscription interval */
+  subscription_interval?: 'monthly' | 'annual';
+
+  /** Tags */
+  tags?: string[];
+
+  /** Is featured */
+  is_featured?: boolean;
+
+  /** Timeout in ms */
+  timeout_ms?: number;
+
+  /** Max retries */
+  max_retries?: number;
+
+  /** Continue on error */
+  continue_on_error?: boolean;
+}
+
+/**
+ * Update Connector Template Data
+ * 
+ * Data that can be updated on an existing connector template.
+ * All fields are optional.
+ * 
+ * @interface UpdateConnectorTemplateData
+ */
+export interface UpdateConnectorTemplateData {
+  name?: string;
+  description?: string;
+  category?: string;
+  icon?: string;
+  type?: string;
+  config?: Record<string, unknown>;
+  input_schema?: Record<string, unknown>;
+  field_mappings?: Array<{
+    source_path: string;
+    target_field: string;
+    transform?: string;
+  }>;
+  pricing_type?: 'free' | 'one_time' | 'subscription';
+  base_price?: number;
+  subscription_interval?: 'monthly' | 'annual';
+  tags?: string[];
+  is_featured?: boolean;
+  is_public?: boolean;
+  timeout_ms?: number;
+  max_retries?: number;
+  continue_on_error?: boolean;
+}

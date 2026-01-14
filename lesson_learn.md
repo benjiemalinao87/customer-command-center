@@ -906,3 +906,195 @@ if (allowedEmails.length === 0) return false;
 
 ### Files Modified
 - `src/App.tsx` - Added allowlist checking to auth flow
+
+---
+
+## Connector Marketplace Builder Implementation (January 15, 2026)
+
+### Feature Overview
+Implemented a complete connector marketplace builder in the Command Center that allows SaaS admins to create, manage, and publish official connector templates directly to the marketplace. This feature enables admins to build platform-native connectors that appear alongside developer-submitted ones.
+
+### Implementation Details
+
+#### 1. Type Definitions
+Added comprehensive TypeScript interfaces for connector templates:
+- `ConnectorTemplate` - Full connector template object with all fields
+- `CreateConnectorTemplateData` - Data required to create a new connector
+- `UpdateConnectorTemplateData` - Partial update data for existing connectors
+
+Key fields include:
+- Basic info: name, description, icon, category, type
+- API configuration: method, url, headers, auth, params, body
+- Field mappings: source_path, target_field, transform
+- Pricing: pricing_type, base_price, subscription_interval
+- Settings: timeout_ms, max_retries, continue_on_error, is_featured, is_public
+
+#### 2. API Service Methods
+Added CRUD operations to `developerModeApi.ts`:
+- `getOfficialConnectors()` - List official connectors with filtering
+- `getOfficialConnector(id)` - Get single connector details
+- `createOfficialConnector(data)` - Create new official connector
+- `updateOfficialConnector(id, data)` - Update existing connector
+- `deleteOfficialConnector(id)` - Delete connector
+- `testConnector(config, testData)` - Test API configuration
+- `toggleConnectorVisibility(id, isPublic)` - Toggle marketplace visibility
+
+All methods use the admin-api Cloudflare Worker backend at `/admin-api/connector-templates` endpoints.
+
+#### 3. Multi-Step Connector Builder
+Created a wizard-style builder with 4 steps:
+
+**Step 1: Basic Info** (`BasicInfoStep.tsx`)
+- Connector name, description, icon (emoji)
+- Category selection (data-enrichment, communication, crm, etc.)
+- Connector type (rest_api, webhook, database, multi_step)
+
+**Step 2: API Configuration** (`ApiConfigStep.tsx`)
+- HTTP method and endpoint URL
+- URL parameters with dynamic variable support
+- Authentication configuration (none, API key, bearer, basic, OAuth2)
+- Custom headers
+- Request body for POST/PUT/PATCH requests
+
+**Step 3: Field Mapping** (`FieldMappingStep.tsx`)
+- Map API response fields to contact/lead fields using dot notation
+- Support for transformations (lowercase, uppercase, trim, phone_format)
+- Input schema configuration (JSON) for user credentials
+- Visual mapping interface with source → target flow
+
+**Step 4: Settings** (`SettingsStep.tsx`)
+- Pricing model: free, one-time payment, or subscription
+- Price and billing interval configuration
+- Tags for search and categorization (max 5)
+- Featured connector toggle
+- Advanced settings: timeout, max retries, continue on error
+
+#### 4. Connector Management UI
+Created `ConnectorManagement.tsx` component with:
+- Grid view of all official connectors
+- Search and category filtering
+- Connector cards showing icon, name, category, description, tags, stats
+- Actions: Edit, Toggle visibility, Delete
+- Create button to launch builder
+- Empty state with helpful messaging
+
+#### 5. Developer Mode Integration
+Added new "Marketplace" tab to `DeveloperMode.tsx`:
+- Positioned between "Connectors" (review queue) and "Revenue" tabs
+- Uses Store icon to differentiate from Connectors tab
+- Renders `ConnectorManagement` component
+
+### Key Design Decisions
+
+1. **Official vs Developer-Submitted**: Official connectors bypass review, developer submissions require approval
+2. **Direct Publishing**: Created with `marketplace_status: 'approved'` immediately
+3. **Flexible Pricing**: Supports free, one-time, and subscription models
+4. **Field Mapping with Transformations**: Rich data transformation with dot notation
+5. **Advanced Error Handling**: Configurable timeout, retries, and continue-on-error behavior
+
+### Files Created
+- `src/features/developer-mode/components/ConnectorManagement.tsx`
+- `src/features/developer-mode/components/ConnectorBuilder.tsx`
+- `src/features/developer-mode/components/connector-builder/BasicInfoStep.tsx`
+- `src/features/developer-mode/components/connector-builder/ApiConfigStep.tsx`
+- `src/features/developer-mode/components/connector-builder/FieldMappingStep.tsx`
+- `src/features/developer-mode/components/connector-builder/SettingsStep.tsx`
+
+### Files Modified
+- `src/features/developer-mode/types/developerMode.ts` - Added interfaces
+- `src/features/developer-mode/services/developerModeApi.ts` - Added API methods
+- `src/features/developer-mode/components/DeveloperMode.tsx` - Added Marketplace tab
+
+### Backend Requirements
+The following endpoints need to be implemented in admin-api Cloudflare Worker:
+- `GET /admin-api/connector-templates` - List
+- `GET /admin-api/connector-templates/:id` - Get one
+- `POST /admin-api/connector-templates` - Create
+- `PATCH /admin-api/connector-templates/:id` - Update
+- `DELETE /admin-api/connector-templates/:id` - Delete
+- `POST /admin-api/connector-templates/test` - Test config
+- `PATCH /admin-api/connector-templates/:id/visibility` - Toggle
+
+### Key Takeaways
+1. Separation of concerns: Official connectors (Marketplace) vs developer submissions (Connectors)
+2. Wizard pattern improves UX for complex configurations
+3. Progressive validation at each step prevents errors
+4. Complete TypeScript coverage ensures reliability
+5. Frontend is ready, backend endpoints need implementation
+
+
+### Backend Implementation (January 15, 2026)
+Added 7 new endpoints to `/Users/benjiemalinao/Documents/deepseek-test-livechat/backend/src/routes/adminRoutes.js`:
+
+1. `GET /api/admin/connector-templates` - List official connectors with pagination & filtering
+2. `GET /api/admin/connector-templates/:id` - Get single connector
+3. `POST /api/admin/connector-templates` - Create official connector
+4. `PATCH /api/admin/connector-templates/:id` - Update connector
+5. `DELETE /api/admin/connector-templates/:id` - Delete connector
+6. `POST /api/admin/connector-templates/test` - Test API configuration
+7. `PATCH /api/admin/connector-templates/:id/visibility` - Toggle marketplace visibility
+
+All endpoints:
+- Require admin authentication via `requireSaasOwner` middleware
+- Filter for `is_official = true` to manage platform connectors
+- Set `workspace_id = null` and `marketplace_status = 'approved'` automatically
+- Handle pagination, search, and category filtering
+
+**Important:** The backend server at `cc.automate8.com` needs to be restarted to apply these changes.
+
+### Bug Fix: URL Path Duplication (January 15, 2026)
+
+**Problem:** API calls failing with "Resource not found"
+
+**Root Cause:** The endpoint paths in `developerModeApi.ts` were using `/admin-api/connector-templates` but since the base URL (`VITE_ADMIN_API_URL`) already points to `https://cc.automate8.com/api/admin`, this resulted in double paths:
+- Wrong: `https://cc.automate8.com/api/admin/admin-api/connector-templates`
+- Correct: `https://cc.automate8.com/api/admin/connector-templates`
+
+**Fix:** Changed all connector-templates endpoints from `/admin-api/connector-templates` to `/connector-templates`:
+```typescript
+// ❌ WRONG
+const response = await makeAdminRequest(`/admin-api/connector-templates${query}`);
+
+// ✅ CORRECT
+const response = await makeAdminRequest(`/connector-templates${query}`);
+```
+
+**Lesson:** Always verify the full URL being constructed when using base URLs + paths. Use browser DevTools Network tab to see actual requests.
+
+### Interactive JSON Field Mapping (January 15, 2026)
+
+**Feature:** Click-to-map JSON response fields
+
+**Implementation:**
+Added an interactive JSON viewer in the API Config step that allows users to click on any value in the API response to automatically create a field mapping.
+
+**How it works:**
+1. User tests the API endpoint
+2. Response is displayed as interactive JSON
+3. User clicks on any value (string, number, boolean)
+4. The field path is automatically selected
+5. When user clicks "Next", the selected field is auto-added as a mapping in Step 3
+
+**Components:**
+- `InteractiveJsonViewer` - Recursive component that renders JSON with clickable values
+- Hover effects on values (green for strings, yellow for numbers/booleans)
+- Visual feedback showing the selected field path
+- Auto-adds mapping when navigating to Field Mapping step
+
+**Benefits:**
+- No need to manually type field paths
+- Prevents typos in dot notation paths
+- Visual confirmation of selected fields
+- Faster connector creation workflow
+
+**Code Pattern:**
+```typescript
+<InteractiveJsonViewer 
+  data={testResponse} 
+  onFieldClick={(path) => {
+    // Store selected field for next step
+    onChange({ selectedField: path });
+  }}
+/>
+```
+

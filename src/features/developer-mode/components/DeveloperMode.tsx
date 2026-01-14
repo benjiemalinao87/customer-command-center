@@ -24,18 +24,19 @@
 
 import { useState } from 'react';
 import React from 'react';
-import { FileText, Package, DollarSign, Building2, Users } from 'lucide-react';
+import { FileText, Package, DollarSign, Building2, Users, Store } from 'lucide-react';
 import { DeveloperApplications } from './DeveloperApplications';
 import { ConnectorReview } from './ConnectorReview';
 import { RevenueDashboard } from './RevenueDashboard';
 import { DeveloperWorkspaces } from './DeveloperWorkspaces';
 import { DeveloperLeads } from './DeveloperLeads';
+import { ConnectorManagement } from './ConnectorManagement';
 
 /**
  * Tab identifier type
  * Defines the available tabs in the Developer Mode interface
  */
-type Tab = 'leads' | 'applications' | 'workspaces' | 'connectors' | 'revenue';
+type Tab = 'leads' | 'applications' | 'workspaces' | 'connectors' | 'marketplace' | 'revenue';
 
 /**
  * DeveloperMode Component
@@ -83,6 +84,12 @@ export function DeveloperMode() {
       label: 'Connectors',
       icon: Package,
       component: ConnectorReview
+    },
+    {
+      id: 'marketplace' as Tab,
+      label: 'Marketplace',
+      icon: Store,
+      component: ConnectorManagement
     },
     {
       id: 'revenue' as Tab,
