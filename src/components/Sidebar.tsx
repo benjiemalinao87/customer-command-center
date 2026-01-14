@@ -1,7 +1,7 @@
-import { BarChart3, Activity, UserCheck, BarChart2, Users, FileText, Database, Book, Webhook, TrendingUp, Code, Shield, LogOut, Moon, Sun, ChevronLeft, ChevronRight, AlertTriangle, ScrollText } from 'lucide-react';
+import { BarChart3, Activity, UserCheck, BarChart2, Users, FileText, Database, Book, Webhook, TrendingUp, Code, Shield, LogOut, Moon, Sun, ChevronLeft, ChevronRight, AlertTriangle, ScrollText, FileEdit } from 'lucide-react';
 import { useState } from 'react';
 
-type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'message-error-logs' | 'system-logs';
+type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'message-error-logs' | 'system-logs' | 'template-management';
 
 interface SidebarProps {
   currentView: View;
@@ -29,14 +29,14 @@ export function Sidebar({ currentView, onViewChange, darkMode, onToggleDarkMode,
     { id: 'webhook-analytics' as View, icon: Webhook, label: 'Webhooks' },
     { id: 'connection-analytics' as View, icon: TrendingUp, label: 'Analytics' },
     { id: 'developer-mode' as View, icon: Code, label: 'Developer' },
+    { id: 'template-management' as View, icon: FileEdit, label: 'Templates' },
     { id: 'admin' as View, icon: Shield, label: 'Admin' },
   ];
 
   return (
     <aside
-      className={`flex-shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300 ${
-        isCollapsed ? 'w-20' : 'w-64'
-      }`}
+      className={`flex-shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-20' : 'w-64'
+        }`}
     >
       {/* Sidebar Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
@@ -75,11 +75,10 @@ export function Sidebar({ currentView, onViewChange, darkMode, onToggleDarkMode,
               <button
                 key={item.id}
                 onClick={() => onViewChange(item.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-colors ${
-                  isActive
-                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                } ${isCollapsed ? 'justify-center' : ''}`}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-colors ${isActive
+                  ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  } ${isCollapsed ? 'justify-center' : ''}`}
                 title={isCollapsed ? item.label : ''}
               >
                 <Icon className="w-5 h-5 flex-shrink-0" />
@@ -95,9 +94,8 @@ export function Sidebar({ currentView, onViewChange, darkMode, onToggleDarkMode,
         {/* Dark Mode Toggle */}
         <button
           onClick={onToggleDarkMode}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
-            isCollapsed ? 'justify-center' : ''
-          }`}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${isCollapsed ? 'justify-center' : ''
+            }`}
           title={isCollapsed ? (darkMode ? 'Light mode' : 'Dark mode') : ''}
         >
           {darkMode ? <Sun className="w-5 h-5 flex-shrink-0" /> : <Moon className="w-5 h-5 flex-shrink-0" />}
@@ -107,9 +105,8 @@ export function Sidebar({ currentView, onViewChange, darkMode, onToggleDarkMode,
         {/* Logout Button */}
         <button
           onClick={onLogout}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors ${
-            isCollapsed ? 'justify-center' : ''
-          }`}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors ${isCollapsed ? 'justify-center' : ''
+            }`}
           title={isCollapsed ? 'Sign out' : ''}
         >
           <LogOut className="w-5 h-5 flex-shrink-0" />

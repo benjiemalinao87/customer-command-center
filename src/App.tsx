@@ -14,18 +14,22 @@ import { WebhookAnalytics } from './features/webhook-analytics';
 import { AnalyticsDashboard } from './features/connection-analytics/AnalyticsDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { DeveloperMode } from './features/developer-mode';
+import { TemplateManagement } from './features/template-management';
 import { Login } from './components/Login';
+import { AccessDenied } from './components/AccessDenied';
 import { Sidebar } from './components/Sidebar';
 import { useSettings } from './shared/components/ui/Settings';
 import { supabase, getCurrentUser } from './lib/supabase';
+import { isUserAllowed } from './lib/allowedUsers';
 import { connectionAnalytics } from './services/connectionAnalytics';
 import { tokenRefreshTracker } from './services/tokenRefreshTracker';
 
-type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'message-error-logs' | 'system-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode';
+type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'message-error-logs' | 'system-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'template-management';
 
 function App() {
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [isAllowed, setIsAllowed] = useState<boolean | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const settings = useSettings();
   const [darkMode, setDarkMode] = useState(() => {
@@ -46,7 +50,15 @@ function App() {
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsAuthenticated(!!session);
-      setUserEmail(session?.user?.email || null);
+      const email = session?.user?.email || null;
+      setUserEmail(email);
+      
+      // Check if user is in the allowed list (only if authenticated)
+      if (session) {
+        setIsAllowed(isUserAllowed(email));
+      } else {
+        setIsAllowed(null);
+      }
 
       // Initialize analytics services with user context
       if (session?.user) {
@@ -75,17 +87,23 @@ function App() {
     try {
       const user = await getCurrentUser();
       setIsAuthenticated(!!user);
-      setUserEmail(user?.email || null);
-
-      // Initialize analytics services with user context
+      const email = user?.email || null;
+      setUserEmail(email);
+      
+      // Check if user is in the allowed list (only if authenticated)
       if (user) {
+        setIsAllowed(isUserAllowed(email));
+        // Initialize analytics services with user context
         connectionAnalytics.initialize(null, user.id);
         tokenRefreshTracker.initialize(user.id);
         console.log('[Analytics] Initialized for user:', user.id);
+      } else {
+        setIsAllowed(null);
       }
     } catch (error) {
       console.error('Auth check failed:', error);
       setIsAuthenticated(false);
+      setIsAllowed(null);
     }
   };
 
@@ -97,6 +115,7 @@ function App() {
     try {
       await supabase.auth.signOut();
       setIsAuthenticated(false);
+      setIsAllowed(null);
       setUserEmail(null);
     } catch (error) {
       console.error('Logout failed:', error);
@@ -107,8 +126,8 @@ function App() {
     setDarkMode(prev => !prev);
   };
 
-  // Show loading state while checking auth
-  if (isAuthenticated === null) {
+  // Show loading state while checking auth or access
+  if (isAuthenticated === null || (isAuthenticated && isAllowed === null)) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="flex flex-col items-center gap-4">
@@ -122,6 +141,11 @@ function App() {
   // Show login screen if not authenticated
   if (!isAuthenticated) {
     return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  // Show access denied if authenticated but not in allowed users list
+  if (isAllowed === false) {
+    return <AccessDenied userEmail={userEmail} />;
   }
 
   return (
@@ -140,92 +164,96 @@ function App() {
       <main className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto">
           <div className={`${settings.wideLayout ? 'max-w-none' : 'max-w-7xl'} mx-auto px-4 sm:px-6 lg:px-8 py-8 transition-all duration-300`}>
-          {currentView === 'dashboard' && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Platform Overview</h2>
-                  <p className="text-gray-600 dark:text-gray-400 mt-1">
-                    SaaS metrics and system performance
-                  </p>
+            {currentView === 'dashboard' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Platform Overview</h2>
+                    <p className="text-gray-600 dark:text-gray-400 mt-1">
+                      SaaS metrics and system performance
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+                    <select
+                      defaultValue="14"
+                      onChange={(e) => {
+                        const days = parseInt(e.target.value);
+                        setDateRange({
+                          from: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
+                          to: new Date().toISOString()
+                        });
+                      }}
+                      className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    >
+                      <option value="7">Last 7 days</option>
+                      <option value="14">Last 14 days</option>
+                    </select>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-                  <select
-                    defaultValue="14"
-                    onChange={(e) => {
-                      const days = parseInt(e.target.value);
-                      setDateRange({
-                        from: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
-                        to: new Date().toISOString()
-                      });
-                    }}
-                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                  >
-                    <option value="7">Last 7 days</option>
-                    <option value="14">Last 14 days</option>
-                  </select>
-                </div>
+                <PerformanceDashboard
+                  dateRange={dateRange}
+                />
               </div>
+            )}
 
-              <PerformanceDashboard
-                dateRange={dateRange}
-              />
-            </div>
-          )}
+            {currentView === 'user-activity' && (
+              <UserActivity />
+            )}
 
-          {currentView === 'user-activity' && (
-            <UserActivity />
-          )}
+            {currentView === 'user-details' && (
+              <UserDetails />
+            )}
 
-          {currentView === 'user-details' && (
-            <UserDetails />
-          )}
+            {currentView === 'api-monitoring' && (
+              <ApiMonitoring />
+            )}
 
-          {currentView === 'api-monitoring' && (
-            <ApiMonitoring />
-          )}
+            {currentView === 'visitors' && (
+              <Visitors />
+            )}
 
-          {currentView === 'visitors' && (
-            <Visitors />
-          )}
+            {currentView === 'activity-logs' && (
+              <ActivityLogs />
+            )}
 
-          {currentView === 'activity-logs' && (
-            <ActivityLogs />
-          )}
+            {currentView === 'message-error-logs' && (
+              <MessageErrorLogs />
+            )}
 
-          {currentView === 'message-error-logs' && (
-            <MessageErrorLogs />
-          )}
+            {currentView === 'system-logs' && (
+              <SystemLogs />
+            )}
 
-          {currentView === 'system-logs' && (
-            <SystemLogs />
-          )}
+            {currentView === 'cache-system' && (
+              <CacheSystem />
+            )}
 
-          {currentView === 'cache-system' && (
-            <CacheSystem />
-          )}
+            {currentView === 'documentation' && (
+              <Documentation />
+            )}
 
-          {currentView === 'documentation' && (
-            <Documentation />
-          )}
+            {currentView === 'webhook-analytics' && (
+              <WebhookAnalytics />
+            )}
 
-          {currentView === 'webhook-analytics' && (
-            <WebhookAnalytics />
-          )}
+            {currentView === 'connection-analytics' && (
+              <AnalyticsDashboard />
+            )}
 
-          {currentView === 'connection-analytics' && (
-            <AnalyticsDashboard />
-          )}
+            {currentView === 'developer-mode' && (
+              <DeveloperMode />
+            )}
 
-          {currentView === 'developer-mode' && (
-            <DeveloperMode />
-          )}
+            {currentView === 'template-management' && (
+              <TemplateManagement />
+            )}
 
-          {currentView === 'admin' && (
-            <AdminDashboard />
-          )}
+            {currentView === 'admin' && (
+              <AdminDashboard />
+            )}
           </div>
         </div>
       </main>

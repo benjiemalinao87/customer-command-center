@@ -820,3 +820,89 @@ import { getActiveSessions } from '../../../../lib/supabaseAdmin';
 - `src/features/visitors/components/Visitors.tsx` - Replaced mock data with real-time session tracking
 - **Database Migration:** Created `get_active_sessions()` RPC function to securely access auth.sessions
 
+---
+
+## User Allowlist Access Control (January 14, 2026)
+
+### Feature Implementation
+Added frontend access control to restrict which users can access the application. Uses an environment variable containing a comma-separated list of allowed email addresses.
+
+### Implementation Details
+1. **Environment Variable Configuration:**
+   - `VITE_ALLOWED_USER_EMAILS` - comma-separated list of allowed email addresses
+   - Case-insensitive email matching
+   - If empty or not set, all authenticated users are allowed (backwards compatible)
+
+2. **New Files Created:**
+   - `src/lib/allowedUsers.ts` - Utility functions for checking user access
+   - `src/components/AccessDenied.tsx` - Component shown when user is not allowed
+
+3. **App.tsx Modifications:**
+   - Added `isAllowed` state to track user authorization
+   - Updated `checkAuth()` and `onAuthStateChange` to check allowlist
+   - Added conditional rendering for `AccessDenied` component
+
+### How It Should Be Done
+```typescript
+// ✅ CORRECT - Check allowlist after authentication
+const checkAuth = async () => {
+  const user = await getCurrentUser();
+  setIsAuthenticated(!!user);
+  const email = user?.email || null;
+  setUserEmail(email);
+  
+  // Check if user is in the allowed list
+  setIsAllowed(isUserAllowed(email));
+};
+
+// ✅ CORRECT - Utility function with case-insensitive matching
+export const isUserAllowed = (email: string | null | undefined): boolean => {
+  if (!email) return false;
+  
+  const allowedEmails = getAllowedUserEmails();
+  if (allowedEmails.length === 0) return true; // No restriction
+  
+  return allowedEmails.includes(email.trim().toLowerCase());
+};
+
+// ✅ CORRECT - Conditional rendering order
+if (!isAuthenticated) return <Login />;
+if (!isAllowed) return <AccessDenied userEmail={userEmail} />;
+return <MainApp />;
+```
+
+### How It Should NOT Be Done
+```typescript
+// ❌ WRONG - Checking allowlist before authentication
+if (!isAllowed) return <AccessDenied />;
+if (!isAuthenticated) return <Login />;
+
+// ❌ WRONG - Case-sensitive matching
+const isAllowed = allowedEmails.includes(email);
+
+// ❌ WRONG - Blocking all users when env var is missing
+if (allowedEmails.length === 0) return false;
+```
+
+### Cloudflare Pages Configuration
+1. Go to Workers & Pages → your project → Settings → Variables and Secrets
+2. Click "+ Add" to add a new secret
+3. Set Name: `VITE_ALLOWED_USER_EMAILS`
+4. Set Value: `user1@example.com,user2@example.com,admin@company.com`
+5. Type: Secret (encrypted)
+6. Redeploy the application for changes to take effect
+
+### Key Takeaways
+- Environment variables with `VITE_` prefix are exposed to the frontend in Vite apps
+- Always use case-insensitive email matching
+- Make the feature backwards compatible (empty list = allow all)
+- Show a helpful Access Denied page with logout option
+- Log access control decisions for debugging
+- Check allowlist AFTER authentication, not before
+
+### Files Created
+- `src/lib/allowedUsers.ts` - Allowlist utility functions
+- `src/components/AccessDenied.tsx` - Access denied UI component
+
+### Files Modified
+- `src/App.tsx` - Added allowlist checking to auth flow
