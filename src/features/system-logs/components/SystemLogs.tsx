@@ -4,9 +4,9 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   Search, RefreshCw, ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
-  AlertTriangle, AlertCircle, Phone, Mail, 
+  AlertTriangle, AlertCircle, Phone, Mail,
   MessageSquare
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
@@ -64,7 +64,7 @@ export function SystemLogs() {
   const getDateRangeStart = (range: string): Date => {
     const now = new Date();
     const start = new Date();
-    
+
     switch (range) {
       case 'today':
         start.setHours(0, 0, 0, 0);
@@ -89,14 +89,14 @@ export function SystemLogs() {
       default:
         start.setHours(0, 0, 0, 0);
     }
-    
+
     return start;
   };
 
   const loadStats = async () => {
     try {
       const startTime = getDateRangeStart(dateRange);
-      
+
       let query = supabase
         .from('system_logs_view')
         .select('level', { count: 'exact' })
@@ -138,7 +138,7 @@ export function SystemLogs() {
       setLoading(true);
       const startTime = getDateRangeStart(dateRange);
       const offset = (currentPage - 1) * pageSize;
-      
+
       let query = supabase
         .from('system_logs_view')
         .select('*', { count: 'exact' })
@@ -259,6 +259,7 @@ export function SystemLogs() {
     { value: '', label: 'All Categories' },
     { value: 'SMS', label: 'SMS' },
     { value: 'EMAIL', label: 'Email' },
+    { value: 'EMAIL_OPEN_PROCESS', label: 'Email Open Process' },
     { value: 'INBOUND', label: 'Inbound' },
     { value: 'OUTBOUND', label: 'Outbound' }
   ];
@@ -290,11 +291,10 @@ export function SystemLogs() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <button
           onClick={() => handleLevelFilter('WARN')}
-          className={`bg-white dark:bg-gray-800 rounded-xl border p-4 transition-all hover:shadow-md ${
-            filterLevel === 'WARN'
-              ? 'border-yellow-500 dark:border-yellow-400 shadow-md'
-              : 'border-gray-200 dark:border-gray-700'
-          }`}
+          className={`bg-white dark:bg-gray-800 rounded-xl border p-4 transition-all hover:shadow-md ${filterLevel === 'WARN'
+            ? 'border-yellow-500 dark:border-yellow-400 shadow-md'
+            : 'border-gray-200 dark:border-gray-700'
+            }`}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -316,11 +316,10 @@ export function SystemLogs() {
 
         <button
           onClick={() => handleLevelFilter('ERROR')}
-          className={`bg-white dark:bg-gray-800 rounded-xl border p-4 transition-all hover:shadow-md ${
-            filterLevel === 'ERROR'
-              ? 'border-red-500 dark:border-red-400 shadow-md'
-              : 'border-gray-200 dark:border-gray-700'
-          }`}
+          className={`bg-white dark:bg-gray-800 rounded-xl border p-4 transition-all hover:shadow-md ${filterLevel === 'ERROR'
+            ? 'border-red-500 dark:border-red-400 shadow-md'
+            : 'border-gray-200 dark:border-gray-700'
+            }`}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -343,7 +342,7 @@ export function SystemLogs() {
 
       {/* Filters Bar */}
       <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-wrap gap-4 items-center justify-between">
-        
+
         {/* Search */}
         <div className="relative flex-1 min-w-[240px]">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -358,7 +357,7 @@ export function SystemLogs() {
 
         {/* Controls */}
         <div className="flex items-center gap-3 overflow-x-auto pb-1 md:pb-0">
-          
+
           {/* Time Range */}
           <select
             value={dateRange}
@@ -380,6 +379,7 @@ export function SystemLogs() {
             className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white text-sm rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All Levels</option>
+            <option value="INFO">INFO</option>
             <option value="WARN">WARN</option>
             <option value="ERROR">ERROR</option>
           </select>
@@ -445,7 +445,7 @@ export function SystemLogs() {
               ) : (
                 filteredLogs.map((log) => (
                   <React.Fragment key={log.id}>
-                    <tr 
+                    <tr
                       className={`
                         group transition-colors cursor-pointer
                         ${expandedLogId === log.id ? 'bg-blue-50/50 dark:bg-blue-900/10' : 'hover:bg-gray-50 dark:hover:bg-gray-700/30'}
@@ -478,7 +478,7 @@ export function SystemLogs() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button 
+                        <button
                           className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium flex items-center justify-end gap-1 w-full"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -490,7 +490,7 @@ export function SystemLogs() {
                         </button>
                       </td>
                     </tr>
-                    
+
                     {/* Expandable Details Row */}
                     {expandedLogId === log.id && (
                       <tr className="bg-gray-50/80 dark:bg-gray-800/50">
@@ -513,14 +513,14 @@ export function SystemLogs() {
                                 </div>
                               </div>
                             </div>
-                            
+
                             <div>
                               <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Metadata & Payload</h4>
                               <div className="bg-gray-100 dark:bg-gray-900 rounded-lg p-3 font-mono text-xs text-gray-700 dark:text-gray-300 overflow-x-auto max-h-40">
                                 <pre>{JSON.stringify(log.metadata, null, 2)}</pre>
                               </div>
                             </div>
-                            
+
                             <div className="md:col-span-2">
                               <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Full Message</h4>
                               <div className="p-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-800 dark:text-gray-200">
@@ -537,13 +537,13 @@ export function SystemLogs() {
             </tbody>
           </table>
         </div>
-        
+
         {/* Pagination Footer */}
         <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50/50 dark:bg-gray-900/50">
           <span className="text-sm text-gray-500 dark:text-gray-400">
             Showing {startRecord} to {endRecord} of {totalCount} logs
           </span>
-          
+
           <div className="flex items-center gap-2">
             <button
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
@@ -553,11 +553,11 @@ export function SystemLogs() {
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            
+
             <span className="text-sm text-gray-600 dark:text-gray-400 px-3">
               Page {currentPage} of {totalPages || 1}
             </span>
-            
+
             <button
               onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
               disabled={currentPage >= totalPages || loading}
