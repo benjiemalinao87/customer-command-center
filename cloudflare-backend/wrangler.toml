@@ -1,4 +1,4 @@
-name = "tippen-backend"
+name = "customer-command-center"
 main = "src/index.ts"
 compatibility_date = "2025-01-16"
 compatibility_flags = ["nodejs_compat"]
@@ -7,7 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 [[durable_objects.bindings]]
 name = "VISITOR_COORDINATOR"
 class_name = "VisitorCoordinator"
-script_name = "tippen-backend"
+script_name = "customer-command-center"
 
 # Durable Object migrations
 [[migrations]]
