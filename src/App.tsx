@@ -15,6 +15,7 @@ import { AnalyticsDashboard } from './features/connection-analytics/AnalyticsDas
 import { AdminDashboard } from './components/AdminDashboard';
 import { DeveloperMode } from './features/developer-mode';
 import { TemplateManagement } from './features/template-management';
+import { ScheduleTriggerRuns } from './features/schedule-trigger-runs';
 import { Login } from './components/Login';
 import { AccessDenied } from './components/AccessDenied';
 import { Sidebar } from './components/Sidebar';
@@ -24,7 +25,7 @@ import { isUserAllowed } from './lib/allowedUsers';
 import { connectionAnalytics } from './services/connectionAnalytics';
 import { tokenRefreshTracker } from './services/tokenRefreshTracker';
 
-type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'message-error-logs' | 'system-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'template-management';
+type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'message-error-logs' | 'system-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'template-management' | 'schedule-trigger-runs';
 
 function App() {
   const [currentView, setCurrentView] = useState<View>('dashboard');
@@ -249,6 +250,10 @@ function App() {
 
             {currentView === 'template-management' && (
               <TemplateManagement />
+            )}
+
+            {currentView === 'schedule-trigger-runs' && (
+              <ScheduleTriggerRuns />
             )}
 
             {currentView === 'admin' && (
