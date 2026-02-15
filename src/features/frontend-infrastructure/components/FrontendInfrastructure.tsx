@@ -74,27 +74,41 @@ export function FrontendInfrastructure() {
 
   const fetchHealth = useCallback(async (isManual = false) => {
     if (isManual) setRefreshing(true);
-    try {
-      const res = await fetch(HEALTH_URL);
-      const data: HealthData = await res.json();
-      setHealth(data);
-      setLastChecked(new Date());
 
-      // Detect origin status changes
-      const prev = prevHealthRef.current;
-      if (prev) {
-        const origins = ['railway', 'pages', 'r2'] as const;
-        for (const key of origins) {
-          const prevStatus = prev.origins[key];
-          const newStatus = data.origins[key];
-          if (prevStatus !== newStatus) {
-            const isHealthy = newStatus === 'healthy' || newStatus === 'available';
-            recordIncident(key, newStatus, isHealthy ? 'recovered' : 'down');
+    // Retry once on failure to avoid deploy-blip false positives
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await fetch(HEALTH_URL);
+        const data: HealthData = await res.json();
+        setHealth(data);
+        setLastChecked(new Date());
+
+        // Detect origin status changes
+        const prev = prevHealthRef.current;
+        if (prev) {
+          const origins = ['railway', 'pages', 'r2'] as const;
+          for (const key of origins) {
+            const prevStatus = prev.origins[key];
+            const newStatus = data.origins[key];
+            if (prevStatus !== newStatus) {
+              const isHealthy = newStatus === 'healthy' || newStatus === 'available';
+              recordIncident(key, newStatus, isHealthy ? 'recovered' : 'down');
+            }
           }
         }
+        prevHealthRef.current = data;
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (attempt === 0) {
+          await new Promise((r) => setTimeout(r, 1500));
+        }
       }
-      prevHealthRef.current = data;
-    } catch {
+    }
+
+    if (lastErr) {
       setHealth(null);
       if (prevHealthRef.current) {
         recordIncident('gateway', 'unreachable', 'down');
@@ -120,28 +134,37 @@ export function FrontendInfrastructure() {
             note: d.note,
           };
         }
-        const start = performance.now();
-        try {
-          const res = await fetch(d.url, { method: 'HEAD', mode: 'cors' });
-          const elapsed = Math.round(performance.now() - start);
-          return {
-            domain: d.url,
-            servedFrom: res.headers.get('x-served-from'),
-            statusCode: res.status,
-            responseTime: elapsed,
-            error: null,
-            gateway: true,
-          };
-        } catch (err: any) {
-          return {
-            domain: d.url,
-            servedFrom: null,
-            statusCode: null,
-            responseTime: null,
-            error: err.message || 'Failed to reach',
-            gateway: true,
-          };
+        // Retry once on failure to avoid false positives during deploys
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const start = performance.now();
+          try {
+            const res = await fetch(d.url, { method: 'HEAD', mode: 'cors' });
+            const elapsed = Math.round(performance.now() - start);
+            return {
+              domain: d.url,
+              servedFrom: res.headers.get('x-served-from'),
+              statusCode: res.status,
+              responseTime: elapsed,
+              error: null,
+              gateway: true,
+            };
+          } catch (err: any) {
+            if (attempt === 0) {
+              await new Promise((r) => setTimeout(r, 1500));
+              continue;
+            }
+            return {
+              domain: d.url,
+              servedFrom: null,
+              statusCode: null,
+              responseTime: null,
+              error: err.message || 'Failed to reach',
+              gateway: true,
+            };
+          }
         }
+        // Unreachable but satisfies TS
+        return { domain: d.url, servedFrom: null, statusCode: null, responseTime: null, error: 'Unknown', gateway: true };
       })
     );
     setDomainChecks(checks);
