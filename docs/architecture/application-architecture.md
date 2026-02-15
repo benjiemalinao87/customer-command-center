@@ -13,197 +13,281 @@ This document provides a comprehensive, up-to-date entity-relationship (ER) diag
 
 ---
 
-## Entity-Relationship Diagram (ASCII Format)
+## Mermaid ER Diagram
 
-### AUTH SCHEMA
-```
-┌──────────────────────────┐
-│ users                    │
-├──────────────────────────┤
-│ 🔑 id (text)             │
-│    email                 │
-│    phone                 │
-│    created_at            │
-│    updated_at            │
-└────────┬─────────────────┘
-         │
-         │ 1:1
-         ├─────────────────────────┐
-         │                         │
-         ▼                         ▼
-┌──────────────────────┐  ┌──────────────────────┐
-│ user_profiles        │  │ admins               │
-├──────────────────────┤  ├──────────────────────┤
-│ 🔑🗝️ id (users.id)   │  │ 🔑🗝️ id (users.id)   │
-│    full_name         │  │    role              │
-│    avatar_url        │  └──────────────────────┘
-└──────────────────────┘
-```
+```mermaid
+erDiagram
+    %% =================== AUTH SCHEMA ===================
+    users {
+        text id 🔑
+        text email
+        text phone
+        timestamptz created_at
+        timestamptz updated_at
+        %% ...other columns
+    }
+    user_profiles {
+        text id 🔑🗝️ (users.id)
+        text full_name
+        text avatar_url
+        %% ...other columns
+    }
+    admins {
+        text id 🔑🗝️ (users.id)
+        text role
+    }
 
-### WORKSPACE CORE
-```
-┌────────────────────────┐           ┌──────────────────────────────┐
-│ workspaces             │           │ workspace_members            │
-├────────────────────────┤           ├──────────────────────────────┤
-│ 🔑 id (text)           │◄──────────┤ 🔑 id (uuid)                 │
-│    name                │   1:N     │ 🟩🗝️ workspace_id (ref)      │
-│    created_at          │           │ 🗝️ user_id (users.id)        │
-│    updated_at          │           │    role                      │
-└────────────────────────┘           │    joined_at                 │
-                                     │ 🟣 UNIQUE (workspace_id,     │
-                                     │           user_id)           │
-                                     └──────────────────────────────┘
-```
+    %% =================== WORKSPACE CORE ===================
+    workspaces {
+        text id 🔑
+        text name
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    workspace_members {
+        uuid id 🔑
+        text workspace_id 🟩🗝️ (workspaces.id)
+        text user_id 🗝️ (users.id)
+        text role
+        timestamptz joined_at
+        %% 🟣 UNIQUE (workspace_id, user_id)
+    }
 
-### CONTACTS & CRM
-```
-┌─────────────────────────┐          ┌──────────────────────────┐
-│ contacts                │          │ contact_notes            │
-├─────────────────────────┤          ├──────────────────────────┤
-│ 🔑 id (uuid)            │◄─────────┤ 🔑 id (uuid)             │
-│ 🟩🗝️ workspace_id       │   1:N    │ 🗝️ contact_id (ref)      │
-│    firstname            │          │ 🟩🗝️ workspace_id        │
-│    lastname             │          │    note                  │
-│    email                │          │    created_at            │
-│    phone_number         │          │ 🟣 UNIQUE (contact_id,   │
-│    lead_source          │          │           workspace_id)  │
-│    lead_status          │          └──────────────────────────┘
-│    created_at           │
-│    updated_at           │
-└─────────────────────────┘
-```
+    %% =================== CONTACTS & CRM ===================
+    contacts {
+        uuid id 🔑
+        text workspace_id 🟩🗝️ (workspaces.id)
+        text firstname
+        text lastname
+        text email
+        text phone_number
+        text lead_source
+        text lead_status
+        timestamptz created_at
+        timestamptz updated_at
+        %% ...other columns
+    }
+    contact_notes {
+        uuid id 🔑
+        uuid contact_id 🗝️ (contacts.id)
+        text workspace_id 🟩🗝️ (workspaces.id)
+        text note
+        timestamptz created_at
+        %% 🟣 UNIQUE (contact_id, workspace_id)
+    }
 
-### STATUS MANAGEMENT
-```
-┌──────────────────────────┐         ┌───────────────────────────┐
-│ status_categories        │         │ status_options            │
-├──────────────────────────┤         ├───────────────────────────┤
-│ 🔑 id (uuid)             │◄────────┤ 🔑 id (uuid)              │
-│ 🟩🗝️ workspace_id        │   1:N   │ 🗝️ category_id (ref)      │
-│    name                  │         │ 🟩🗝️ workspace_id         │
-│ 🗝️ created_by (users.id) │         │    label                  │
-│    created_at            │         │    color                  │
-└──────────────────────────┘         │    display_order          │
-                                     │ 🗝️ created_by (users.id)  │
-                                     │    created_at             │
-                                     └───────────────────────────┘
-```
+    %% =================== STATUS MANAGEMENT ===================
+    status_categories {
+        uuid id 🔑
+        text workspace_id 🟩🗝️ (workspaces.id)
+        text name
+        text created_by 🗝️ (users.id)
+        timestamptz created_at
+    }
+    status_options {
+        uuid id 🔑
+        uuid category_id 🗝️ (status_categories.id)
+        text workspace_id 🟩🗝️ (workspaces.id)
+        text label
+        text color
+        int display_order
+        text created_by 🗝️ (users.id)
+        timestamptz created_at
+    }
 
-### LIVECHAT & MESSAGING
-```
-┌──────────────────────────┐
-│ livechat_messages        │
-├──────────────────────────┤
-│ 🔑 id (uuid)             │
-│ 🟩🗝️ workspace_id        │
-│ 🗝️ contact_id (contacts) │
-│ 🗝️ sender_id (users)     │
-│    message               │
-│    sent_at               │
-│    channel               │
-│    status                │
-└──────────────────────────┘
-```
+    %% =================== LIVECHAT & MESSAGING ===================
+    livechat_messages {
+        uuid id 🔑
+        text workspace_id 🟩🗝️ (workspaces.id)
+        uuid contact_id 🗝️ (contacts.id)
+        text sender_id 🗝️ (users.id)
+        text message
+        timestamptz sent_at
+        text channel
+        text status
+    }
 
-### FLOW BUILDER & AUTOMATION
-```
-┌──────────────────┐       ┌──────────────────┐       ┌────────────────────┐
-│ flow_folders     │       │ flows            │       │ flow_executions    │
-├──────────────────┤       ├──────────────────┤       ├────────────────────┤
-│ 🔑 id            │◄──────┤ 🔑 id            │◄──────┤ 🔑 id              │
-│ 🟩🗝️ workspace_id│  1:N  │ 🗝️ folder_id     │  1:N  │ 🗝️ flow_id         │
-│    name          │       │ 🟩🗝️ workspace_id│       │ 🗝️ contact_id      │
-│    created_at    │       │    name          │       │ 🟩🗝️ workspace_id  │
-│    updated_at    │       │    nodes (jsonb) │       │    status          │
-└──────────────────┘       │    edges (jsonb) │       │    started_at      │
-                           │    created_at    │       │    finished_at     │
-                           │    updated_at    │       │    error_message   │
-                           └──────────────────┘       │    execution_time  │
-                                                      │    source          │
-                                                      │    metadata (jsonb)│
-                                                      └─────────┬──────────┘
-                                                                │
-                                                                │ 1:N
-                               ┌────────────────────────────────┼────────────────┐
-                               │                                │                │
-                               ▼                                ▼                ▼
-                    ┌──────────────────┐         ┌──────────────────┐  ┌───────────────────┐
-                    │ execution_steps  │         │ dead_letter_queue│  │ flow_monitoring_  │
-                    ├──────────────────┤         ├──────────────────┤  │ alerts            │
-                    │ 🔑 id            │         │ 🔑 id            │  ├───────────────────┤
-                    │ 🗝️ execution_id  │         │ 🗝️ execution_id  │  │ 🔑 id             │
-                    │ 🟩🗝️ workspace_id│         │ 🟩🗝️ workspace_id│  │ 🟩🗝️ workspace_id │
-                    │    step_type     │         │    reason        │  │    alert_type     │
-                    │    status        │         │    payload       │  │    threshold      │
-                    │    started_at    │         │    created_at    │  │    notification_  │
-                    │    finished_at   │         └──────────────────┘  │    settings       │
-                    │    error_message │                               │    created_at     │
-                    │    metadata      │                               └───────────────────┘
-                    └──────────────────┘
-```
+    %% =================== FLOW BUILDER & AUTOMATION ===================
+    flow_folders {
+        uuid id 🔑
+        text name
+        text workspace_id 🟩🗝️ (workspaces.id)
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    flows {
+        uuid id 🔑
+        text name
+        uuid folder_id 🗝️ (flow_folders.id)
+        text workspace_id 🟩🗝️ (workspaces.id)
+        jsonb nodes
+        jsonb edges
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    flow_executions {
+        uuid id 🔑
+        uuid flow_id 🗝️ (flows.id)
+        uuid contact_id 🗝️ (contacts.id)
+        text workspace_id 🟩🗝️ (workspaces.id)
+        text status
+        timestamptz started_at
+        timestamptz finished_at
+        text error_message
+        int execution_time
+        text source
+        jsonb metadata
+    }
+    execution_steps {
+        uuid id 🔑
+        uuid execution_id 🗝️ (flow_executions.id)
+        text workspace_id 🟩🗝️ (workspaces.id)
+        text step_type
+        text status
+        timestamptz started_at
+        timestamptz finished_at
+        text error_message
+        jsonb metadata
+    }
+    dead_letter_queue {
+        uuid id 🔑
+        uuid execution_id 🗝️ (flow_executions.id)
+        text workspace_id 🟩🗝️ (workspaces.id)
+        text reason
+        jsonb payload
+        timestamptz created_at
+    }
+    flow_monitoring_alerts {
+        uuid id 🔑
+        text workspace_id 🟩🗝️ (workspaces.id)
+        text alert_type
+        text threshold
+        text notification_settings
+        timestamptz created_at
+    }
 
-### WEBHOOKS
-```
-┌──────────────────────┐       ┌───────────────────┐
-│ webhooks             │       │ webhook_logs      │
-├──────────────────────┤       ├───────────────────┤
-│ 🔑 id                │◄──────┤ 🔑 id             │
-│ 🟩🗝️ workspace_id    │  1:N  │ 🗝️ webhook_id     │
-│    url               │       │ 🟩🗝️ workspace_id │
-│    event_type        │       │    event          │
-│ 🗝️ preprocessing_    │       │    payload (jsonb)│
-│    updated_by        │       │    created_at     │
-│    created_at        │       └───────────────────┘
-└──────┬───────────────┘
-       │                        ┌───────────────────┐
-       │ 1:N                    │ field_mappings    │
-       └───────────────────────►├───────────────────┤
-                                │ 🔑 id             │
-                                │ 🗝️ webhook_id     │
-┌──────────────────────┐        │ 🟩🗝️ workspace_id │
-│ webhook_templates    │        │    source_field   │
-├──────────────────────┤        │    target_field   │
-│ 🔑 id                │        └───────────────────┘
-│    name              │
-│    description       │
-│    template (jsonb)  │
-│    created_at        │
-└──────────────────────┘
-```
+    %% =================== WEBHOOKS ===================
+    webhooks {
+        uuid id 🔑
+        text workspace_id 🟩🗝️ (workspaces.id)
+        text url
+        text event_type
+        text preprocessing_updated_by 🗝️ (users.id)
+        timestamptz created_at
+    }
+    webhook_logs {
+        uuid id 🔑
+        uuid webhook_id 🗝️ (webhooks.id)
+        text workspace_id 🟩🗝️ (workspaces.id)
+        text event
+        jsonb payload
+        timestamptz created_at
+    }
+    field_mappings {
+        uuid id 🔑
+        uuid webhook_id 🗝️ (webhooks.id)
+        text workspace_id 🟩🗝️ (workspaces.id)
+        text source_field
+        text target_field
+    }
+    webhook_templates {
+        uuid id 🔑
+        text name
+        text description
+        jsonb template
+        timestamptz created_at
+    }
 
-### TWILIO & INTEGRATIONS
-```
-┌───────────────────────────┐         ┌──────────────────────┐
-│ workspace_twilio_config   │         │ twilio_numbers       │
-├───────────────────────────┤         ├──────────────────────┤
-│ 🔑 id                     │         │ 🔑 id                │
-│ 🟩🗝️ workspace_id         │         │ 🟩🗝️ workspace_id    │
-│    webhook_type           │         │    phone_number      │
-│    webhook_url            │         │    friendly_name     │
-│    is_configured          │         │    is_active         │
-│    account_sid            │         │    created_at        │
-│    auth_token             │         └──────────────────────┘
-│    created_at             │
-└───────────────────────────┘
-```
+    %% =================== TWILIO & INTEGRATIONS ===================
+    workspace_twilio_config {
+        uuid id 🔑
+        text workspace_id 🟩🗝️ (workspaces.id)
+        text webhook_type
+        text webhook_url
+        boolean is_configured
+        text account_sid
+        text auth_token
+        timestamptz created_at
+    }
+    twilio_numbers {
+        uuid id 🔑
+        text workspace_id 🟩🗝️ (workspaces.id)
+        text phone_number
+        text friendly_name
+        boolean is_active
+        timestamptz created_at
+    }
 
-### A2P 10DLC REGISTRATION
-```
-┌──────────────────────┐         ┌──────────────────────┐
-│ a2p_brands           │         │ a2p_campaigns        │
-├──────────────────────┤         ├──────────────────────┤
-│ 🔑 id                │◄────────┤ 🔑 id                │
-│ 🟩🗝️ workspace_id    │   1:N   │ 🟩🗝️ workspace_id    │
-│    brand_name        │         │ 🗝️ brand_id (ref)    │
-│    ein               │         │    campaign_name     │
-│    status            │         │    campaign_type     │
-│    twilio_brand_sid  │         │    use_case          │
-│    created_at        │         │    status            │
-│    updated_at        │         │    twilio_campaign_  │
-└──────────────────────┘         │    sid               │
-                                 │    created_at        │
-                                 │    updated_at        │
-                                 └──────────────────────┘
+    %% =================== A2P 10DLC REGISTRATION ===================
+    a2p_brands {
+        uuid id 🔑
+        text workspace_id 🟩🗝️ (workspaces.id)
+        text brand_name
+        text ein
+        text status
+        text twilio_brand_sid
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    a2p_campaigns {
+        uuid id 🔑
+        text workspace_id 🟩🗝️ (workspaces.id)
+        text brand_id 🗝️ (a2p_brands.id)
+        text campaign_name
+        text campaign_type
+        text use_case
+        text status
+        text twilio_campaign_sid
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    %% =================== RELATIONSHIPS ===================
+    %% Users
+    user_profiles ||--|| users : "id"
+    admins ||--|| users : "id"
+    workspace_members ||--o{ users : "user_id"
+    workspace_members ||--o{ workspaces : "workspace_id"
+    %% Contacts
+    contacts ||--o{ workspaces : "workspace_id"
+    contact_notes ||--o{ contacts : "contact_id"
+    contact_notes ||--o{ workspaces : "workspace_id"
+    %% Status
+    status_categories ||--o{ workspaces : "workspace_id"
+    status_categories ||--o{ users : "created_by"
+    status_options ||--o{ status_categories : "category_id"
+    status_options ||--o{ workspaces : "workspace_id"
+    status_options ||--o{ users : "created_by"
+    %% Livechat
+    livechat_messages ||--o{ contacts : "contact_id"
+    livechat_messages ||--o{ workspaces : "workspace_id"
+    livechat_messages ||--o{ users : "sender_id"
+    %% Flow
+    flow_folders ||--o{ workspaces : "workspace_id"
+    flows ||--o{ flow_folders : "folder_id"
+    flows ||--o{ workspaces : "workspace_id"
+    flow_executions ||--o{ flows : "flow_id"
+    flow_executions ||--o{ contacts : "contact_id"
+    flow_executions ||--o{ workspaces : "workspace_id"
+    execution_steps ||--o{ flow_executions : "execution_id"
+    execution_steps ||--o{ workspaces : "workspace_id"
+    dead_letter_queue ||--o{ flow_executions : "execution_id"
+    dead_letter_queue ||--o{ workspaces : "workspace_id"
+    flow_monitoring_alerts ||--o{ workspaces : "workspace_id"
+    %% Webhooks
+    webhooks ||--o{ workspaces : "workspace_id"
+    webhooks ||--o{ users : "preprocessing_updated_by"
+    webhook_logs ||--o{ webhooks : "webhook_id"
+    webhook_logs ||--o{ workspaces : "workspace_id"
+    field_mappings ||--o{ webhooks : "webhook_id"
+    field_mappings ||--o{ workspaces : "workspace_id"
+    %% Twilio
+    workspace_twilio_config ||--o{ workspaces : "workspace_id"
+    twilio_numbers ||--o{ workspaces : "workspace_id"
+    %% A2P
+    a2p_brands ||--o{ workspaces : "workspace_id"
+    a2p_campaigns ||--o{ a2p_brands : "brand_id"
+    a2p_campaigns ||--o{ workspaces : "workspace_id"
 ```
 
 ---

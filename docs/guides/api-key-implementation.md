@@ -19,7 +19,7 @@ API keys are secret tokens that grant access to your API. They are used to authe
 - **Prefix:** Use a prefix to identify the type of key (e.g., `sk_live_` for secret live keys, `pk_live_` for publishable live keys, `sk_test_` for secret test keys). This helps in quick identification and can be useful for automated systems.
 - **Random String:** A cryptographically secure random string (e.g., 32-64 characters long).
 - **Checksum (Optional):** A short checksum can help detect accidental modifications, though this is less common for server-side keys.
-- **Example:** `[prefix]_[environment]_[random-32-to-64-chars]`
+- **Example:** `sk_live_EXAMPLE_KEY_REPLACE_ME`
 
 ### 2.2. API Key Storage
 - **NEVER store raw API keys directly in your database.**

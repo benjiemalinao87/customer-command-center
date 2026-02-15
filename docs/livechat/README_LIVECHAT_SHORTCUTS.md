@@ -22,183 +22,139 @@ This feature implements a shortcut system for the livechat component that allows
 
 ## 3. User Flow
 
-### Shortcut Usage Flow
-
-```
-                         ┌──────────────────────┐
-                         │ User types /         │
-                         │ in chat input        │
-                         └──────────┬───────────┘
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │ Show shortcuts       │
-                         │ dropdown             │
-                         └──────────┬───────────┘
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │ User selects         │
-                         │ shortcut from list   │
-                         └──────────┬───────────┘
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │ Insert shortcut      │
-                         │ text in chat input   │
-                         └──────────┬───────────┘
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │ User edits/sends     │
-                         │ message              │
-                         └──────────────────────┘
+```mermaid
+graph TD
+    A[User types / in chat] --> B{Show shortcuts dropdown}
+    B --> C[User selects shortcut]
+    C --> D[Insert shortcut text in chat]
+    D --> E[User edits/sends message]
+    
+    F[User clicks Add/Manage Shortcuts] --> G[Open shortcuts modal]
+    G --> H[User creates new shortcut]
+    H --> I[User enters title and message]
+    I --> J[User clicks Create]
+    J --> K[Shortcut saved to database]
+    
+    G --> L[User edits existing shortcut]
+    L --> M[User updates title/message]
+    M --> N[User clicks Save]
+    N --> O[Shortcut updated in database]
+    
+    G --> P[User deletes shortcut]
+    P --> Q[Confirmation dialog]
+    Q --> R[Shortcut removed from database]
 ```
 
-### Shortcut Management Flow
-
+ASCII Diagram:
 ```
-                         ┌──────────────────────────┐
-                         │ User clicks Add/Manage   │
-                         │ Shortcuts button         │
-                         └────────────┬─────────────┘
-                                      │
-                                      ▼
-                         ┌──────────────────────────┐
-                         │ Open shortcuts modal     │
-                         └────────┬─────────────────┘
-                                  │
-                                  │
-             ┌────────────────────┼──────────────────┐
-             │                    │                  │
-             ▼                    ▼                  ▼
-┌─────────────────────┐  ┌────────────────┐  ┌──────────────────┐
-│ Create new          │  │ Edit existing  │  │ Delete shortcut  │
-│ shortcut            │  │ shortcut       │  │                  │
-└──────────┬──────────┘  └───────┬────────┘  └────────┬─────────┘
-           │                     │                     │
-           ▼                     ▼                     ▼
-┌─────────────────────┐  ┌────────────────┐  ┌──────────────────┐
-│ Enter title and     │  │ Update title   │  │ Confirmation     │
-│ message             │  │ and message    │  │ dialog           │
-└──────────┬──────────┘  └───────┬────────┘  └────────┬─────────┘
-           │                     │                     │
-           ▼                     ▼                     ▼
-┌─────────────────────┐  ┌────────────────┐  ┌──────────────────┐
-│ Click Create        │  │ Click Save     │  │ Confirm deletion │
-│ button              │  │ button         │  │                  │
-└──────────┬──────────┘  └───────┬────────┘  └────────┬─────────┘
-           │                     │                     │
-           ▼                     ▼                     ▼
-┌─────────────────────┐  ┌────────────────┐  ┌──────────────────┐
-│ Shortcut saved      │  │ Shortcut       │  │ Shortcut removed │
-│ to database         │  │ updated in DB  │  │ from database    │
-└─────────────────────┘  └────────────────┘  └──────────────────┘
+User Chat Flow                         Shortcut Management Flow
++--------------+                       +------------------+
+| Type / in    |                       | Click Add/Manage |
+| chat input   |                       | Shortcuts button |
++------+-------+                       +--------+---------+
+       |                                        |
+       v                                        v
++------+-------+                       +--------+---------+
+| View dropdown|                       | Open shortcuts   |
+| of shortcuts |                       | modal            |
++------+-------+                       +--------+---------+
+       |                                        |
+       v                                        +------------+------------+
++------+-------+                       |                     |            |
+| Select       |               +-------+------+     +--------+-------+    |
+| shortcut     |               | Create new   |     | Edit existing  |    |
++------+-------+               | shortcut     |     | shortcut       |    |
+       |                       +-------+------+     +--------+-------+    |
+       v                               |                     |            |
++------+-------+                       v                     v            v
+| Shortcut text|               +-------+------+     +--------+-------+  +-+------------+
+| inserted in  |               | Enter title  |     | Update title   |  | Delete       |
+| chat input   |               | and message  |     | and message    |  | shortcut     |
++------+-------+               +-------+------+     +--------+-------+  +-+------------+
+       |                               |                     |            |
+       v                               v                     v            v
++------+-------+               +-------+------+     +--------+-------+  +-+------------+
+| Edit/send    |               | Click Create |     | Click Save     |  | Confirm      |
+| message      |               | button       |     | button         |  | deletion     |
++--------------+               +-------+------+     +--------+-------+  +-+------------+
+                                       |                     |            |
+                                       v                     v            v
+                               +-------+------+     +--------+-------+  +-+------------+
+                               | Shortcut     |     | Shortcut       |  | Shortcut     |
+                               | saved to DB  |     | updated in DB  |  | removed      |
+                               +--------------+     +----------------+  +--------------+
 ```
 
 ## 4. Front-end & Back-end Flow
 
-### Create Shortcut Flow
-
-```
-┌──────┐  ┌───────────────┐  ┌────────────────┐  ┌────────────────┐  ┌──────────┐
-│ User │  │ ShortcutModal │  │ ShortcutService│  │ SupabaseClient │  │ Database │
-└──┬───┘  └───────┬───────┘  └────────┬───────┘  └────────┬───────┘  └────┬─────┘
-   │              │                    │                   │               │
-   │ Open         │                    │                   │               │
-   │ shortcut     │                    │                   │               │
-   │ modal        │                    │                   │               │
-   ├─────────────►│                    │                   │               │
-   │              │                    │                   │               │
-   │              │ Load existing      │                   │               │
-   │              │ shortcuts          │                   │               │
-   │              ├───────────────────►│                   │               │
-   │              │                    │                   │               │
-   │              │                    │ fetchShortcuts    │               │
-   │              │                    │ (userId,          │               │
-   │              │                    │  workspaceId)     │               │
-   │              │                    ├──────────────────►│               │
-   │              │                    │                   │               │
-   │              │                    │                   │ SELECT *      │
-   │              │                    │                   │ FROM shortcuts│
-   │              │                    │                   ├──────────────►│
-   │              │                    │                   │               │
-   │              │                    │                   │ Return        │
-   │              │                    │                   │ shortcuts     │
-   │              │                    │                   │◄──────────────┤
-   │              │                    │                   │               │
-   │              │                    │ Return shortcuts  │               │
-   │              │                    │◄──────────────────┤               │
-   │              │                    │                   │               │
-   │              │ Display shortcuts  │                   │               │
-   │              │◄───────────────────┤                   │               │
-   │              │                    │                   │               │
-   │ Create new   │                    │                   │               │
-   │ shortcut     │                    │                   │               │
-   ├─────────────►│                    │                   │               │
-   │              │                    │                   │               │
-   │              │ saveShortcut(      │                   │               │
-   │              │ title, message,    │                   │               │
-   │              │ userId,            │                   │               │
-   │              │ workspaceId)       │                   │               │
-   │              ├───────────────────►│                   │               │
-   │              │                    │                   │               │
-   │              │                    │ insertShortcut    │               │
-   │              │                    │ (shortcutData)    │               │
-   │              │                    ├──────────────────►│               │
-   │              │                    │                   │               │
-   │              │                    │                   │ INSERT INTO   │
-   │              │                    │                   │ shortcuts     │
-   │              │                    │                   ├──────────────►│
-   │              │                    │                   │               │
-   │              │                    │                   │ Confirm       │
-   │              │                    │                   │ insertion     │
-   │              │                    │                   │◄──────────────┤
-   │              │                    │                   │               │
-   │              │                    │ Return success    │               │
-   │              │                    │◄──────────────────┤               │
-   │              │                    │                   │               │
-   │              │ Update UI          │                   │               │
-   │              │◄───────────────────┤                   │               │
-   │              │                    │                   │               │
+```mermaid
+sequenceDiagram
+    participant User
+    participant ChatInput
+    participant ShortcutModal
+    participant ShortcutDropdown
+    participant ShortcutService
+    participant SupabaseClient
+    participant Database
+    
+    %% Create Shortcut Flow
+    User->>ShortcutModal: Open shortcut modal
+    ShortcutModal->>ShortcutService: Load existing shortcuts
+    ShortcutService->>SupabaseClient: fetchShortcuts(userId, workspaceId)
+    SupabaseClient->>Database: SELECT * FROM shortcuts
+    Database-->>SupabaseClient: Return shortcuts
+    SupabaseClient-->>ShortcutService: Return shortcuts
+    ShortcutService-->>ShortcutModal: Display shortcuts
+    
+    User->>ShortcutModal: Create new shortcut
+    ShortcutModal->>ShortcutService: saveShortcut(title, message, userId, workspaceId)
+    ShortcutService->>SupabaseClient: insertShortcut(shortcutData)
+    SupabaseClient->>Database: INSERT INTO shortcuts
+    Database-->>SupabaseClient: Confirm insertion
+    SupabaseClient-->>ShortcutService: Return success
+    ShortcutService-->>ShortcutModal: Update UI
+    
+    %% Use Shortcut Flow
+    User->>ChatInput: Type "/"
+    ChatInput->>ShortcutDropdown: Show dropdown
+    ShortcutDropdown->>ShortcutService: getShortcuts()
+    ShortcutService-->>ShortcutDropdown: Return cached shortcuts
+    ShortcutDropdown-->>ChatInput: Display shortcuts
+    
+    User->>ShortcutDropdown: Select shortcut
+    ShortcutDropdown->>ChatInput: Insert shortcut text
+    ChatInput-->>User: Display inserted text
 ```
 
-### Use Shortcut Flow
-
+ASCII Diagram:
 ```
-┌──────┐  ┌───────────┐  ┌──────────────────┐  ┌────────────────┐
-│ User │  │ ChatInput │  │ ShortcutDropdown │  │ ShortcutService│
-└──┬───┘  └─────┬─────┘  └────────┬─────────┘  └────────┬───────┘
-   │            │                  │                     │
-   │ Type "/"   │                  │                     │
-   ├───────────►│                  │                     │
-   │            │                  │                     │
-   │            │ Show dropdown    │                     │
-   │            ├─────────────────►│                     │
-   │            │                  │                     │
-   │            │                  │ getShortcuts()      │
-   │            │                  ├────────────────────►│
-   │            │                  │                     │
-   │            │                  │ Return cached       │
-   │            │                  │ shortcuts           │
-   │            │                  │◄────────────────────┤
-   │            │                  │                     │
-   │            │ Display shortcuts│                     │
-   │            │◄─────────────────┤                     │
-   │            │                  │                     │
-   │ Select     │                  │                     │
-   │ shortcut   │                  │                     │
-   ├────────────┼─────────────────►│                     │
-   │            │                  │                     │
-   │            │ Insert shortcut  │                     │
-   │            │ text             │                     │
-   │            │◄─────────────────┤                     │
-   │            │                  │                     │
-   │ Display    │                  │                     │
-   │ inserted   │                  │                     │
-   │ text       │                  │                     │
-   │◄───────────┤                  │                     │
-   │            │                  │                     │
+User        ChatInput      ShortcutModal   ShortcutService   SupabaseClient   Database
+ |              |               |                |                |              |
+ |              |               |                |                |              |
+ |------------->|               |                |                |              |
+ | Type "/"     |               |                |                |              |
+ |              |-------------->|                |                |              |
+ |              | Show dropdown |                |                |              |
+ |              |               |--------------->|                |              |
+ |              |               | Get shortcuts  |                |              |
+ |              |               |                |--------------->|              |
+ |              |               |                | Query shortcuts|              |
+ |              |               |                |                |------------->|
+ |              |               |                |                | SELECT query |
+ |              |               |                |                |<-------------|
+ |              |               |                |                | Return data  |
+ |              |               |                |<---------------|              |
+ |              |               |                | Return data    |              |
+ |              |               |<---------------|                |              |
+ |              |<--------------|                |                |              |
+ |              | Show shortcuts|                |                |              |
+ |------------->|               |                |                |              |
+ | Select item  |               |                |                |              |
+ |              |---------------|                |                |              |
+ |              | Insert text   |                |                |              |
+ |<-------------|               |                |                |              |
+ | See text     |               |                |                |              |
+ |              |               |                |                |              |
 ```
 
 ## 5. File Structure

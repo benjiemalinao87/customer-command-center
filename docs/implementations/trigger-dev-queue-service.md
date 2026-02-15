@@ -30,135 +30,86 @@
 
 ## 3. User Flow
 
+```mermaid
+graph TD
+    A[User] --> B{Choose Schedule Type}
+    B -->|Immediate| C[Queue Message]
+    B -->|Delay| D[Set Delay Minutes]
+    B -->|Specific Time| E[Set Date/Time]
+    B -->|Recurring| F[Set Schedule Pattern]
+    C --> G[Process Queue]
+    D --> H[Wait for Delay]
+    E --> I[Wait Until Time]
+    F --> J[Create Recurring Job]
+    G --> K[Send Message]
+    H --> K
+    I --> K
+    J --> K
+    K -->|Success| L[Update Status]
+    K -->|Failure| M[Retry Logic]
+    M --> K
 ```
-                              ┌─────────────┐
-                              │    User     │
-                              └──────┬──────┘
-                                     │
-                                     ▼
-                    ┌────────────────────────────────┐
-                    │  Choose Schedule Type          │
-                    │  ┌──────────────────────────┐ │
-                    │  │ • Immediate              │ │
-                    │  │ • Delay (minutes)        │ │
-                    │  │ • Specific Time          │ │
-                    │  │ • Recurring              │ │
-                    │  └──────────────────────────┘ │
-                    └─┬──────┬────────┬──────┬─────┘
-                      │      │        │      │
-        ┌─────────────┘      │        │      └────────────┐
-        │                    │        │                   │
-        ▼                    ▼        ▼                   ▼
-┌───────────────┐   ┌────────────────────┐  ┌────────────────────┐  ┌─────────────────┐
-│ Queue Message │   │ Set Delay Minutes  │  │ Set Date/Time      │  │ Set Schedule    │
-│ (Immediate)   │   │                    │  │                    │  │ Pattern         │
-└───────┬───────┘   └─────────┬──────────┘  └──────────┬─────────┘  └────────┬────────┘
-        │                     │                        │                     │
-        ▼                     ▼                        ▼                     ▼
-┌───────────────┐   ┌────────────────────┐  ┌────────────────────┐  ┌─────────────────┐
-│ Process       │   │ Wait for Delay     │  │ Wait Until Time    │  │ Create          │
-│ Queue         │   │                    │  │                    │  │ Recurring Job   │
-└───────┬───────┘   └─────────┬──────────┘  └──────────┬─────────┘  └────────┬────────┘
-        │                     │                        │                     │
-        │                     └────────────┬───────────┘                     │
-        │                                  │                                 │
-        └──────────────────────────────────┼─────────────────────────────────┘
-                                           │
-                                           ▼
-                                  ┌────────────────┐
-                                  │  Send Message  │
-                                  │  via Twilio    │
-                                  └───────┬────────┘
-                                          │
-                                          ▼
-                                  ┌────────────────┐
-                                  │  Check Result  │
-                                  └───┬────────┬───┘
-                                      │        │
-                              Success │        │ Failure
-                                      │        │
-                         ┌────────────▼──┐  ┌──▼──────────┐
-                         │ Update Status │  │ Retry Logic │
-                         │ to Delivered  │  │ (Max 3x)    │
-                         └───────────────┘  └──┬──────────┘
-                                               │
-                                               └──────┐
-                                                      │
-                                               ┌──────▼──────┐
-                                               │ Send Message│
-                                               │ (Retry)     │
-                                               └─────────────┘
+
+ASCII Version:
+```
+User
+  |
+  v
+[Schedule Type]
+  |
+  +---> [Immediate] ---> [Queue]
+  |
+  +---> [Delay] ------> [Wait Minutes]
+  |
+  +---> [Time] -------> [Wait Until]
+  |
+  +---> [Recurring] --> [Cron Job]
+         |
+         v
+    [Send Message]
+         |
+         v
+    [Update Status]
 ```
 
 ## 4. Front-end & Back-end Flow
 
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant R as Routes
+    participant T as Trigger.dev
+    participant S as Supabase
+    participant Tw as Twilio
+
+    C->>R: Schedule Message Request
+    R->>S: Save Message Details
+    R->>T: Create Job/Task
+    T-->>R: Job Created
+    R-->>C: Scheduling Confirmed
+    
+    Note over T: Wait Period
+    
+    T->>S: Update Status to Processing
+    T->>Tw: Send SMS
+    Tw-->>T: Delivery Status
+    T->>S: Update Final Status
 ```
-┌────────┐     ┌────────┐     ┌─────────────┐     ┌──────────┐     ┌────────┐
-│ Client │     │ Routes │     │ Trigger.dev │     │ Supabase │     │ Twilio │
-└───┬────┘     └───┬────┘     └──────┬──────┘     └────┬─────┘     └───┬────┘
-    │              │                  │                 │               │
-    │ Schedule     │                  │                 │               │
-    │ Message      │                  │                 │               │
-    │ Request      │                  │                 │               │
-    ├─────────────►│                  │                 │               │
-    │              │                  │                 │               │
-    │              │ Save Message     │                 │               │
-    │              │ Details          │                 │               │
-    │              ├─────────────────────────────────────►               │
-    │              │                  │                 │               │
-    │              │                  │ insert()        │               │
-    │              │                  │ scheduled_      │               │
-    │              │                  │ sms_jobs        │               │
-    │              │                  │                 │               │
-    │              │ success          │                 │               │
-    │              │◄─────────────────────────────────────┐             │
-    │              │                  │                 │               │
-    │              │ Create Job/Task  │                 │               │
-    │              ├─────────────────►│                 │               │
-    │              │                  │                 │               │
-    │              │                  │ Job registered  │               │
-    │              │                  │ in queue        │               │
-    │              │                  │                 │               │
-    │              │ Job Created      │                 │               │
-    │              │◄─────────────────┤                 │               │
-    │              │                  │                 │               │
-    │ Scheduling   │                  │                 │               │
-    │ Confirmed    │                  │                 │               │
-    │◄─────────────┤                  │                 │               │
-    │              │                  │                 │               │
-    │              │                  │                 │               │
-    │              │           ┌──────────────────┐     │               │
-    │              │           │  ⏰ Wait Period  │     │               │
-    │              │           │  (Scheduled time)│     │               │
-    │              │           └──────────────────┘     │               │
-    │              │                  │                 │               │
-    │              │                  │ Update Status   │               │
-    │              │                  │ to Processing   │               │
-    │              │                  ├────────────────►│               │
-    │              │                  │                 │               │
-    │              │                  │ success         │               │
-    │              │                  │◄────────────────┤               │
-    │              │                  │                 │               │
-    │              │                  │ Send SMS        │               │
-    │              │                  │ (to, body,      │               │
-    │              │                  │ mediaUrl)       │               │
-    │              │                  ├─────────────────────────────────►│
-    │              │                  │                 │               │
-    │              │                  │                 │ SMS sent      │
-    │              │                  │                 │ to carrier    │
-    │              │                  │                 │               │
-    │              │                  │ Delivery Status │               │
-    │              │                  │◄─────────────────────────────────┤
-    │              │                  │                 │               │
-    │              │                  │ Update Final    │               │
-    │              │                  │ Status          │               │
-    │              │                  │ (delivered/     │               │
-    │              │                  │  failed)        │               │
-    │              │                  ├────────────────►│               │
-    │              │                  │                 │               │
-    │              │                  │ success         │               │
-    │              │                  │◄────────────────┤               │
-    │              │                  │                 │               │
+
+ASCII Version:
+```
+Client -> Routes: Schedule Request
+Routes -> Supabase: Save Details
+Routes -> Trigger.dev: Create Job
+Trigger.dev -> Routes: Job Created
+Routes -> Client: Confirmed
+
+[Wait Period]
+
+Trigger.dev -> Supabase: Update Status
+Trigger.dev -> Twilio: Send SMS
+Twilio -> Trigger.dev: Status
+Trigger.dev -> Supabase: Final Status
 ```
 
 ## 5. File Structure

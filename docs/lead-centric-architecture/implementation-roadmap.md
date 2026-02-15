@@ -8,91 +8,33 @@ This document provides a comprehensive implementation roadmap for migrating from
 
 ### Approach: Hybrid Dual-System Migration
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│              HYBRID DUAL-SYSTEM MIGRATION ROADMAP                           │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌──────────────────┐       ┌──────────────────┐       ┌──────────────────┐
-│  CURRENT STATE   │       │  MIGRATION PATH  │       │  TARGET STATE    │
-│                  │       │                  │       │                  │
-│ Contact-Centric  │──────>│  4 PHASES        │──────>│ Lead-Centric     │
-│ Architecture     │       │  (6-8 Months)    │       │ Architecture     │
-└──────────────────┘       └──────────────────┘       └──────────────────┘
-        │                                                       │
-        │                                                       │
-        ▼                                                       ▼
-┌──────────────────┐                               ┌──────────────────────┐
-│ Current Features │                               │ Target Features      │
-├──────────────────┤                               ├──────────────────────┤
-│ • Contact-       │                               │ • Lead-Centric       │
-│   Centric        │                               │   Schema             │
-│   Schema         │                               │ • Multiple Leads     │
-│ • Single Lead    │                               │   per Contact        │
-│   per Contact    │                               │ • Multi-Level        │
-│ • Basic Custom   │                               │   Custom Fields      │
-│   Fields         │                               │ • Advanced Pipeline  │
-│                  │                               │   Management         │
-└──────────────────┘                               └──────────────────────┘
-
-
-            MIGRATION PHASES (6-8 MONTHS)
-            ═══════════════════════════════════
-
-                    ┌────────────────────┐
-                    │  PHASE 1:          │
-                    │  FOUNDATION        │
-                    │  (Months 1-2)      │
-                    │                    │
-                    │  • New schema      │
-                    │  • Sync layer      │
-                    │  • Migration tools │
-                    └─────────┬──────────┘
-                              │
-                              ▼
-                    ┌────────────────────┐
-                    │  PHASE 2:          │
-                    │  CORE MIGRATION    │
-                    │  (Months 3-4)      │
-                    │                    │
-                    │  • Data migration  │
-                    │  • API updates     │
-                    │  • Testing         │
-                    └─────────┬──────────┘
-                              │
-                              ▼
-                    ┌────────────────────┐
-                    │  PHASE 3:          │
-                    │  ADVANCED FEATURES │
-                    │  (Months 5-6)      │
-                    │                    │
-                    │  • Multi-lead      │
-                    │  • Custom fields   │
-                    │  • Pipelines       │
-                    └─────────┬──────────┘
-                              │
-                              ▼
-                    ┌────────────────────┐
-                    │  PHASE 4:          │
-                    │  OPTIMIZATION      │
-                    │  (Months 7-8)      │
-                    │                    │
-                    │  • Performance     │
-                    │  • Analytics       │
-                    │  • Polish          │
-                    └────────────────────┘
-
-
-PHASE PROGRESSION:
-═══════════════════════════════════════════════════════════════
-Current State → Phase 1 → Phase 2 → Phase 3 → Phase 4 → Target State
-
-RISK MITIGATION:
-═══════════════════════════════════════════════════════════════
-• Each phase is independently testable and reversible
-• Parallel operation ensures zero downtime
-• Comprehensive rollback procedures at each phase
-• Data validation checkpoints throughout migration
+```mermaid
+graph TD
+    A[Current State] --> B[Phase 1: Foundation]
+    B --> C[Phase 2: Core Migration]
+    C --> D[Phase 3: Advanced Features]
+    D --> E[Phase 4: Optimization]
+    E --> F[Target State]
+    
+    subgraph "Current State"
+        A1[Contact-Centric Schema]
+        A2[Single Lead per Contact]
+        A3[Basic Custom Fields]
+    end
+    
+    subgraph "Target State"
+        F1[Lead-Centric Schema]
+        F2[Multiple Leads per Contact]
+        F3[Multi-Level Custom Fields]
+        F4[Advanced Pipeline Management]
+    end
+    
+    style A fill:#ffebee
+    style F fill:#e8f5e8
+    style B fill:#fff3e0
+    style C fill:#fff3e0
+    style D fill:#fff3e0
+    style E fill:#fff3e0
 ```
 
 ### Key Principles
@@ -307,87 +249,22 @@ Implement advanced lead-centric features including multi-level custom fields, en
 #### Deliverables
 
 **1. Multi-Level Custom Fields System**
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│              MULTI-LEVEL CUSTOM FIELDS HIERARCHY                    │
-└─────────────────────────────────────────────────────────────────────┘
-
-┌────────────────────────────────────────────────────────────────┐
-│  LEVEL 1: CONTACT LEVEL FIELDS                                 │
-│  (Shared across all leads for the same contact)                │
-├────────────────────────────────────────────────────────────────┤
-│                                                                │
-│  ┌───────────────────┐  ┌────────────────┐  ┌──────────────┐  │
-│  │  DEMOGRAPHICS     │  │  PROPERTY INFO │  │ ACCOUNT      │  │
-│  │                   │  │                │  │ STATUS       │  │
-│  │  • Age            │  │  • Address     │  │ • VIP        │  │
-│  │  • Income         │  │  • Home Type   │  │ • Credit     │  │
-│  │  │  Occupation    │  │  • Year Built  │  │ • Verified   │  │
-│  │  • Family Size    │  │  • Sq Footage  │  │ • Preferred  │  │
-│  └───────────────────┘  └────────────────┘  └──────────────┘  │
-│                                                                │
-└────────────────────────┬───────────────────────────────────────┘
-                         │
-                         │ Inherited by all leads
-                         │
-                         ▼
-┌────────────────────────────────────────────────────────────────┐
-│  LEVEL 2: LEAD LEVEL FIELDS                                    │
-│  (Specific to each product/service lead)                       │
-├────────────────────────────────────────────────────────────────┤
-│                                                                │
-│  ┌──────────────────┐  ┌─────────────────┐  ┌──────────────┐  │
-│  │ SOURCE TRACKING  │  │  CAMPAIGN DATA  │  │ PROCESS INFO │  │
-│  │                  │  │                 │  │              │  │
-│  │  • Lead Source   │  │  • Campaign ID  │  │ • Stage      │  │
-│  │  • Referrer      │  │  • Ad Group     │  │ • Priority   │  │
-│  │  • UTM Params    │  │  • Keywords     │  │ • Temperature│  │
-│  │  • Form ID       │  │  • Landing Page │  │ • Next Steps │  │
-│  └──────────────────┘  └─────────────────┘  └──────────────┘  │
-│                                                                │
-└────────────────────────┬───────────────────────────────────────┘
-                         │
-                         │ Associated with appointments
-                         │
-                         ▼
-┌────────────────────────────────────────────────────────────────┐
-│  LEVEL 3: APPOINTMENT LEVEL FIELDS                             │
-│  (Specific to each appointment/interaction)                    │
-├────────────────────────────────────────────────────────────────┤
-│                                                                │
-│  ┌──────────────────┐         ┌─────────────────────────┐     │
-│  │  OUTCOME DATA    │         │  FOLLOW-UP ACTIONS      │     │
-│  │                  │         │                         │     │
-│  │  • Result        │         │  • Next Contact Date    │     │
-│  │  • Notes         │         │  • Action Items         │     │
-│  │  • Duration      │         │  • Assigned To          │     │
-│  │  • Objections    │         │  • Reminders            │     │
-│  │  • Quote Value   │         │  • Documents Needed     │     │
-│  └──────────────────┘         └─────────────────────────┘     │
-│                                                                │
-└────────────────────────────────────────────────────────────────┘
-
-
-DATA INHERITANCE FLOW:
-═══════════════════════════════════════════════════════════════
-Contact Fields → Available to ALL leads for that contact
-Lead Fields → Specific to EACH lead (per product/service)
-Appointment Fields → Specific to EACH appointment within a lead
-
-EXAMPLE SCENARIO:
-═══════════════════════════════════════════════════════════════
-John Doe (Contact)
-  ├─ Demographics: Age 45, Income $150k (Contact Level)
-  │
-  ├─ Lead #1: Kitchen Remodel
-  │   ├─ Source: Google Ads (Lead Level)
-  │   └─ Appointment #1: Site Visit
-  │       └─ Outcome: Quote $25k (Appointment Level)
-  │
-  └─ Lead #2: Solar Installation
-      ├─ Source: Facebook Ads (Lead Level)
-      └─ Appointment #1: Consultation
-          └─ Outcome: Proposal $18k (Appointment Level)
+```mermaid
+graph TD
+    A[Contact Level Fields] --> B[Demographics]
+    A --> C[Property Info]
+    A --> D[Account Status]
+    
+    E[Lead Level Fields] --> F[Source Tracking]
+    E --> G[Campaign Data]
+    E --> H[Process Info]
+    
+    I[Appointment Level Fields] --> J[Outcome Data]
+    I --> K[Follow-up Actions]
+    
+    style A fill:#e1f5fe
+    style E fill:#e8f5e8
+    style I fill:#fff3e0
 ```
 
 **2. Advanced Analytics & Reporting**
@@ -536,70 +413,21 @@ Performance Optimization Stack:
 
 ### Migration Approach
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                   MIGRATION APPROACH - 4 PHASES                         │
-└─────────────────────────────────────────────────────────────────────────┘
-
-┌──────────────┐      ┌──────────────┐      ┌──────────────┐      ┌──────────────┐
-│  PHASE 1:    │      │  PHASE 2:    │      │  PHASE 3:    │      │  PHASE 4:    │
-│  SYNC LAYER  │─────>│  PARALLEL    │─────>│  TRAFFIC     │─────>│  LEGACY      │
-│              │      │  OPERATION   │      │  MIGRATION   │      │  DEPRECATION │
-└──────────────┘      └──────────────┘      └──────────────┘      └──────────────┘
-      │                      │                      │                      │
-      ▼                      ▼                      ▼                      ▼
-┌──────────────┐      ┌──────────────┐      ┌──────────────┐      ┌──────────────┐
-│ • Build sync │      │ • Run both   │      │ • Switch to  │      │ • Remove old │
-│   layer      │      │   schemas    │      │   new schema │      │   schema     │
-│ • Test data  │      │ • Monitor    │      │ • Monitor    │      │ • Clean up   │
-│   flow       │      │   integrity  │      │   stability  │      │   sync layer │
-└──────────────┘      └──────────────┘      └──────────────┘      └──────────────┘
-
-
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        BI-DIRECTIONAL DATA FLOW                         │
-└─────────────────────────────────────────────────────────────────────────┘
-
-                      ┌──────────────────┐
-                      │   SYNC LAYER     │
-                      │                  │
-                      │  • Real-time     │
-                      │    replication   │
-                      │  • Conflict      │
-                      │    resolution    │
-                      │  • Data          │
-                      │    validation    │
-                      └────────┬─────────┘
-                               │
-                    ┌──────────┴──────────┐
-                    │                     │
-                    ▼                     ▼
-        ┌──────────────────┐    ┌──────────────────┐
-        │   OLD SCHEMA     │    │   NEW SCHEMA     │
-        │                  │    │                  │
-        │  • contacts      │◄───│  • customers     │
-        │  • custom_fields │───►│  • leads         │
-        │  • appointments  │    │  • lead_custom   │
-        │                  │    │    _fields       │
-        └──────────────────┘    └──────────────────┘
-                │                         │
-                └────────────┬────────────┘
-                             │
-                     (Synchronized)
-
-
-PHASE TIMELINE:
-═══════════════════════════════════════════════════════════════
-Phase 1 (Sync Layer)       → 2-3 weeks
-Phase 2 (Parallel Ops)     → 4-6 weeks
-Phase 3 (Traffic Migration)→ 1-2 weeks
-Phase 4 (Deprecation)      → 2-3 weeks
-
-ROLLBACK CAPABILITY:
-═══════════════════════════════════════════════════════════════
-• Phase 1-2: Full rollback available
-• Phase 3: Can revert traffic to old schema
-• Phase 4: Backup restoration required
+```mermaid
+graph LR
+    A[Phase 1: Sync Layer] --> B[Phase 2: Parallel Operation]
+    B --> C[Phase 3: Traffic Migration]
+    C --> D[Phase 4: Legacy Deprecation]
+    
+    subgraph "Data Flow"
+        E[Old Schema] -.-> F[Sync Layer] -.-> G[New Schema]
+        G -.-> F -.-> E
+    end
+    
+    style A fill:#fff3e0
+    style B fill:#e8f5e8
+    style C fill:#e1f5fe
+    style D fill:#ffebee
 ```
 
 ### Migration Steps

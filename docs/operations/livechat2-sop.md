@@ -605,7 +605,7 @@ git push origin feature/your-feature-name
 # After merging to main
 git checkout main
 git pull origin main
-npm run scripts/post-push-changelog.js  # Required!
+node tools/post-push-changelog.js  # Required!
 ```
 
 ---

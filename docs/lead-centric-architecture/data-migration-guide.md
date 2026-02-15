@@ -10,92 +10,26 @@ This comprehensive guide provides detailed procedures, scripts, and best practic
 
 The migration follows a **dual-schema parallel operation** approach to ensure zero downtime and complete data integrity:
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    MIGRATION STRATEGY FLOWCHART                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-                    ┌──────────────────────────────┐
-                    │  1. PRE-MIGRATION            │
-                    │     ASSESSMENT               │
-                    │  • Data volume analysis      │
-                    │  • Quality assessment        │
-                    │  • Risk evaluation           │
-                    └─────────────┬────────────────┘
-                                  │
-                                  ▼
-                    ┌──────────────────────────────┐
-                    │  2. SCHEMA PREPARATION       │
-                    │  • Create new tables         │
-                    │  • Set up indexes            │
-                    │  • Configure constraints     │
-                    └─────────────┬────────────────┘
-                                  │
-                                  ▼
-                    ┌──────────────────────────────┐
-                    │  3. DATA SYNCHRONIZATION     │
-                    │     SETUP                    │
-                    │  • Build sync layer          │
-                    │  • Configure triggers        │
-                    │  • Test data flow            │
-                    └─────────────┬────────────────┘
-                                  │
-                                  ▼
-    ┌───────────────────────────────────────────────────────────────────────┐
-    │           4. PARALLEL OPERATION PERIOD                                │
-    │                                                                       │
-    │   ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
-    │   │   OLD SCHEMA    │◄────►│   SYNC LAYER    │◄────►│   NEW SCHEMA    │
-    │   │                 │      │                 │      │                 │
-    │   │ • contacts      │      │ • Bi-directional│      │ • leads         │
-    │   │ • custom_fields │      │   replication   │      │ • activities    │
-    │   │ • existing data │      │ • Conflict      │      │ • new structure │
-    │   │                 │      │   resolution    │      │                 │
-    │   └─────────────────┘      └─────────────────┘      └─────────────────┘
-    │                                                                       │
-    └───────────────────────────────┬───────────────────────────────────────┘
-                                    │
-                                    ▼
-                    ┌──────────────────────────────┐
-                    │  5. DATA VALIDATION &        │
-                    │     TESTING                  │
-                    │  • Verify data integrity     │
-                    │  • Performance testing       │
-                    │  • User acceptance           │
-                    └─────────────┬────────────────┘
-                                  │
-                                  ▼
-                    ┌──────────────────────────────┐
-                    │  6. PRODUCTION CUTOVER       │
-                    │  • Switch to new schema      │
-                    │  • Monitor performance       │
-                    │  • Address issues            │
-                    └─────────────┬────────────────┘
-                                  │
-                                  ▼
-                    ┌──────────────────────────────┐
-                    │  7. LEGACY SCHEMA CLEANUP    │
-                    │  • Archive old data          │
-                    │  • Remove sync layer         │
-                    │  • Complete migration        │
-                    └──────────────────────────────┘
-
-
-MIGRATION PHASES SUMMARY:
-═══════════════════════════════════════════════════════════════════
-Phase 1: Assessment    → Analyze current data and plan migration
-Phase 2: Preparation   → Create new schema infrastructure
-Phase 3: Sync Setup    → Build bi-directional data sync
-Phase 4: Parallel Ops  → Run both schemas simultaneously
-Phase 5: Validation    → Verify data integrity and performance
-Phase 6: Cutover       → Switch production to new schema
-Phase 7: Cleanup       → Remove old schema and sync layer
-
-ROLLBACK POINTS:
-═══════════════════════════════════════════════════════════════════
-• Before Phase 4: Simple rollback (no production impact)
-• During Phase 4: Disable sync, continue with old schema
-• After Phase 6: Restore from backup if critical issues found
+```mermaid
+graph TD
+    A[Pre-Migration Assessment] --> B[Schema Preparation]
+    B --> C[Data Synchronization Setup]
+    C --> D[Parallel Operation Period]
+    D --> E[Data Validation & Testing]
+    E --> F[Production Cutover]
+    F --> G[Legacy Schema Cleanup]
+    
+    subgraph "Parallel Operation"
+        H[Old Schema] <--> I[Sync Layer] <--> J[New Schema]
+    end
+    
+    style A fill:#fff3e0
+    style B fill:#e8f5e8
+    style C fill:#e1f5fe
+    style D fill:#f3e5f5
+    style E fill:#fff8e1
+    style F fill:#e8f5e8
+    style G fill:#ffebee
 ```
 
 ### Key Principles
@@ -508,107 +442,27 @@ COMMIT;
 
 ### Synchronization Layer Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    SYNCHRONIZATION LAYER ARCHITECTURE                   │
-└─────────────────────────────────────────────────────────────────────────┘
-
-┌────────────────────┐           ┌─────────────────────────────────────┐
-│  OLD SCHEMA        │           │       SYNCHRONIZATION LAYER         │
-│  (Legacy)          │           │                                     │
-└────────────────────┘           └─────────────────────────────────────┘
-
-┌────────────────────┐
-│  CONTACTS TABLE    │
-│  (Legacy)          │
-└─────────┬──────────┘
-          │
-          │ INSERT/UPDATE/DELETE
-          │
-          ▼
-┌─────────────────────┐
-│  SYNC TRIGGER       │
-│  (Database Trigger) │
-└─────────┬───────────┘
-          │
-          ▼
-┌──────────────────────────────────────────┐
-│  SYNC LOGIC                              │
-│  • Detect operation type                │
-│  • Transform data structure              │
-│  • Map fields appropriately              │
-│  • Handle conflicts                      │
-└─────────┬──────────────────┬─────────────┘
-          │                  │
-          ▼                  ▼
-┌──────────────────┐  ┌──────────────────┐
-│  CUSTOMERS TABLE │  │  LEADS TABLE     │
-│  (New Schema)    │  │  (New Schema)    │
-└──────────────────┘  └──────────────────┘
-
-
-┌───────────────────────────┐
-│  CONTACT CUSTOM FIELDS    │
-│  (Legacy)                 │
-└──────────┬────────────────┘
-           │
-           │ INSERT/UPDATE/DELETE
-           │
-           ▼
-┌───────────────────────┐
-│  FIELD SYNC TRIGGER   │
-│  (Database Trigger)   │
-└──────────┬────────────┘
-           │
-           ▼
-┌──────────────────────────────────────────┐
-│  FIELD SYNC LOGIC                        │
-│  • Map custom field definitions          │
-│  • Transform field values                │
-│  • Preserve field types                  │
-│  • Handle multi-lead scenarios           │
-└─────────┬──────────────────┬─────────────┘
-          │                  │
-          ▼                  ▼
-┌────────────────────┐  ┌─────────────────────┐
-│  CUSTOMER CUSTOM   │  │  LEAD CUSTOM        │
-│  FIELDS            │  │  FIELDS             │
-│  (New Schema)      │  │  (New Schema)       │
-└────────────────────┘  └─────────────────────┘
-
-
-┌───────────────────────────┐
-│  PIPELINE CHANGES         │
-│  (Lead Status Updates)    │
-└──────────┬────────────────┘
-           │
-           │ Status Change Events
-           │
-           ▼
-┌───────────────────────┐
-│  PIPELINE SYNC        │
-│  • Track transitions  │
-│  • Create activities  │
-└──────────┬────────────┘
-           │
-           ▼
-┌───────────────────────────┐
-│  APPOINTMENTS TABLE       │
-│  (New Schema)             │
-└───────────────────────────┘
-
-
-SYNC FLOW SUMMARY:
-═══════════════════════════════════════════════════════════════
-1. Contacts → Triggers → Sync Logic → Customers + Leads
-2. Contact Custom Fields → Field Sync → Customer/Lead Custom Fields
-3. Pipeline Changes → Pipeline Sync → Appointments
-
-BIDIRECTIONAL SYNC:
-═══════════════════════════════════════════════════════════════
-• Changes in OLD schema propagate to NEW schema
-• Changes in NEW schema propagate back to OLD schema
-• Conflict resolution favors NEW schema during parallel operation
+```mermaid
+graph TD
+    A[Contacts Table] --> B[Sync Trigger]
+    B --> C[Sync Logic]
+    C --> D[Customers Table]
+    C --> E[Leads Table]
+    
+    F[Contact Custom Fields] --> G[Field Sync Trigger]
+    G --> H[Field Sync Logic]
+    H --> I[Customer Custom Fields]
+    H --> J[Lead Custom Fields]
+    
+    K[Pipeline Changes] --> L[Pipeline Sync]
+    L --> M[Appointments Table]
+    
+    style A fill:#ffebee
+    style D fill:#e8f5e8
+    style E fill:#e8f5e8
+    style F fill:#ffebee
+    style I fill:#e8f5e8
+    style J fill:#e8f5e8
 ```
 
 ### Step 1: Contact to Customer Synchronization

@@ -35,7 +35,8 @@ X-Workspace-Id: your_workspace_id
 ## API Categories
 
 ### Core Business Logic
-- **[Contacts API](./CONTACTS_API.md)** - Contact management (CRUD, search, enhanced search)
+- **[Contacts API](./contacts.md)** - Contact management (CRUD, search, enhanced search)
+  - **NEW**: `/api/v3/contacts/search` - High-performance Cloudflare Worker endpoint (90% faster)
 - **[Pipeline API](./PIPELINE_API.md)** - CRM pipeline and opportunities management
 - **[Messaging API](./MESSAGING_API.md)** - Real-time messaging with Socket.IO and SMS
 - **[Board API](./BOARD_API.md)** - Board management and visualization

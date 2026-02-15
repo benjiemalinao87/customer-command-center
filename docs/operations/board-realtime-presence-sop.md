@@ -55,108 +55,30 @@ Tracks each user's presence, board context, and cursor.
 
 ## 4. User Flow Diagram
 
-```
-                    ┌──────────────────────────┐
-                    │  User logs in /          │
-                    │  opens board             │
-                    └────────────┬─────────────┘
-                                 │
-                                 ▼
-                    ┌──────────────────────────┐
-                    │  Frontend upserts        │
-                    │  user_presence row       │
-                    │  - user_id               │
-                    │  - board_id              │
-                    │  - cursor_x, cursor_y    │
-                    │  - display_name          │
-                    │  - avatar_url            │
-                    │  - updated_at            │
-                    └────────────┬─────────────┘
-                                 │
-                                 ▼
-                    ┌──────────────────────────┐
-                    │  Supabase Realtime       │
-                    │  broadcasts changes      │
-                    │  to all subscribers      │
-                    └────────────┬─────────────┘
-                                 │
-                                 ▼
-                    ┌──────────────────────────┐
-                    │  Other clients receive   │
-                    │  updates & update UI     │
-                    │  - Presence avatars      │
-                    │  - Cursor positions      │
-                    └──────┬──────────┬────────┘
-                           │          │
-                           │          │
-              ┌────────────▼──┐   ┌───▼──────────────────┐
-              │  User moves   │   │  User closes tab or  │
-              │  cursor or    │   │  logs out            │
-              │  switches     │   └──────────┬───────────┘
-              │  board        │              │
-              └───────┬───────┘              ▼
-                      │           ┌──────────────────────┐
-                      │           │  Presence row        │
-                      │           │  deleted or          │
-                      │           │  timed out           │
-                      │           └──────────────────────┘
-                      │
-                      └──────────┐
-                                 │
-                                 ▼
-                    ┌──────────────────────────┐
-                    │  Frontend upserts        │
-                    │  user_presence row       │
-                    │  (Loop back)             │
-                    └──────────────────────────┘
+```mermaid
+flowchart TD
+    A[User logs in / opens board] --> B[Frontend upserts user_presence row]
+    B --> C[Supabase Realtime broadcasts changes]
+    C --> D[Other clients receive updates & update UI]
+    D --> E[User moves cursor or switches board]
+    E --> B
+    D --> F[User closes tab or logs out]
+    F --> G[Presence row deleted or timed out]
 ```
 
 ---
 
 ## 5. Frontend + Backend Flow (Sequence)
 
-```
-┌──────┐          ┌────────────────────┐          ┌──────────┐
-│ User │          │ Frontend (React)   │          │ Supabase │
-└──┬───┘          └─────────┬──────────┘          └────┬─────┘
-   │                        │                          │
-   │ Move cursor /          │                          │
-   │ switch board           │                          │
-   ├───────────────────────►│                          │
-   │                        │                          │
-   │                        │ Upsert user_presence     │
-   │                        │ {                        │
-   │                        │   user_id,               │
-   │                        │   board_id,              │
-   │                        │   cursor_x,              │
-   │                        │   cursor_y,              │
-   │                        │   display_name,          │
-   │                        │   avatar_url,            │
-   │                        │   updated_at             │
-   │                        │ }                        │
-   │                        ├─────────────────────────►│
-   │                        │                          │
-   │                        │ Upsert confirmed         │
-   │                        │◄─────────────────────────┤
-   │                        │                          │
-   │                        │                          │ Realtime
-   │                        │                          │ broadcast
-   │                        │                          │ to all
-   │                        │                          │ subscribers
-   │                        │                          │
-   │                        │ Realtime update          │
-   │                        │ for all clients          │
-   │                        │◄─────────────────────────┤
-   │                        │                          │
-   │                        │ Process update:          │
-   │                        │ - Update avatars         │
-   │                        │ - Update cursors         │
-   │                        │ - Update presence list   │
-   │                        │                          │
-   │ Update UI              │                          │
-   │ (avatars, cursors)     │                          │
-   │◄───────────────────────┤                          │
-   │                        │                          │
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant F as Frontend (React)
+    participant S as Supabase
+    U->>F: Move cursor / switch board
+    F->>S: Upsert user_presence (with new board/cursor)
+    S-->>F: Realtime update for all clients
+    F->>U: Update UI (avatars, cursors)
 ```
 
 ---

@@ -266,201 +266,89 @@ Agent   or Unknown
    └────────────────┘
 ```
 
-### Detailed ASCII Flow Diagram
+### Mermaid Diagram
 
-```
-                           ┌───────────────────────────────┐
-                           │      INCOMING CALL            │
-                           └───────────────┬───────────────┘
-                                           │
-                                           ▼
-                           ┌───────────────────────────────┐
-                           │   Identify Contact by         │
-                           │   Phone Number                │
-                           └───────────────┬───────────────┘
-                                           │
-                        ┌──────────────────┴──────────────────┐
-                        │                                     │
-                        ▼                                     ▼
-        ┌───────────────────────────┐         ┌──────────────────────────┐
-        │  KNOWN CONTACT            │         │  UNKNOWN CALLER          │
-        └───────────┬───────────────┘         └──────────┬───────────────┘
-                    │                                    │
-                    ▼                                    │
-        ┌───────────────────────────┐                    │
-        │  STEP 1:                  │                    │
-        │  Check Agent Assignments  │                    │
-        │  Query:                   │                    │
-        │  livechat_contact_        │                    │
-        │  assignments              │                    │
-        └───────────┬───────────────┘                    │
-                    │                                    │
-        ┌───────────┴────────────┐                       │
-        │                        │                       │
-        ▼                        ▼                       │
-┌────────────────┐      ┌────────────────┐              │
-│  HAS           │      │  NO ASSIGNMENT │              │
-│  ASSIGNMENT    │      │                │              │
-└───────┬────────┘      └────────┬───────┘              │
-        │                        │                       │
-        ▼                        └───────────┬───────────┘
-┌────────────────────┐                      │
-│  STEP 2:           │                      │
-│  Fetch Agent       │                      │
-│  Details           │                      │
-│  Query:            │                      │
-│  user_profiles_    │                      │
-│  with_workspace    │                      ▼
-└────────┬───────────┘          ┌────────────────────────┐
-         │                      │  FALLBACK MODE:        │
-         │                      │  Ring ALL Agents       │
-         │                      │  (All workspace agents)│
-         ▼                      └────────────┬───────────┘
-┌────────────────────┐                      │
-│  Ring ONLY         │                      │
-│  Assigned Agent(s) │                      │
-└────────┬───────────┘                      │
-         │                                  │
-         └────────────┬─────────────────────┘
-                      │
-                      ▼
-         ┌────────────────────────────┐
-         │  First Agent to Answer     │
-         │  Gets the Call             │
-         └────────────┬───────────────┘
-                      │
-                      ▼
-         ┌────────────────────────────┐
-         │  Log Call with:            │
-         │  • Agent ID                │
-         │  • Contact ID              │
-         │  • Timestamp               │
-         │  • Call Duration           │
-         └────────────┬───────────────┘
-                      │
-                      ▼
-         ┌────────────────────────────┐
-         │  CALL CONNECTED            │
-         │  ✓ Agent on call           │
-         │  ✓ Call logged             │
-         └────────────────────────────┘
+```mermaid
+flowchart TD
+    Start([Incoming Call]) --> Identify[Identify Contact by Phone Number]
+
+    Identify --> Decision{Contact Status}
+
+    Decision -->|Known Contact| CheckAssignment[Check Agent Assignments<br/>Step 1: Query livechat_contact_assignments]
+    Decision -->|Unknown Caller| RingAll[Ring ALL Agents<br/>Fallback Mode]
+
+    CheckAssignment --> HasAssignment{Has Assignment?}
+
+    HasAssignment -->|Yes| FetchDetails[Fetch Agent Details<br/>Step 2: Query user_profiles_with_workspace]
+    HasAssignment -->|No Assignment| RingAll
+
+    FetchDetails --> RingAssigned[Ring ONLY Assigned Agent]
+
+    RingAll --> FirstAnswer[First to Answer Gets Call]
+    RingAssigned --> FirstAnswer
+
+    FirstAnswer --> LogCall[Log Call with Agent ID]
+
+    LogCall --> End([Call Connected])
+
+    style Start fill:#e1f5ff
+    style End fill:#d4edda
+    style Decision fill:#fff3cd
+    style HasAssignment fill:#fff3cd
+    style CheckAssignment fill:#cfe2ff
+    style FetchDetails fill:#cfe2ff
+    style RingAssigned fill:#d1ecf1
+    style RingAll fill:#f8d7da
+    style FirstAnswer fill:#d4edda
+    style LogCall fill:#d4edda
 ```
 
 ### 3-Tier Routing with Advanced Rules
 
-```
-                                    ┌──────────────────────────┐
-                                    │    INCOMING CALL         │
-                                    └────────────┬─────────────┘
-                                                 │
-                                                 ▼
-                                    ┌──────────────────────────┐
-                                    │  Identify Contact by     │
-                                    │  Phone Number            │
-                                    └────────────┬─────────────┘
-                                                 │
-                                    ┌────────────┴─────────────┐
-                                    │ CONTACT FOUND?           │
-                                    └────┬─────────────────┬───┘
-                                         │                 │
-                          Known Contact  │                 │  Unknown Caller
-                                         │                 │
-                                         ▼                 ▼
-                        ┌────────────────────────┐   ┌─────────────────────────┐
-                        │ TIER 1:                │   │ TIER 3: FALLBACK        │
-                        │ Direct Assignment      │   │ Ring ALL Agents         │
-                        │                        │   │ (All workspace agents)  │
-                        │ Check:                 │   └──────────┬──────────────┘
-                        │ livechat_contact_      │              │
-                        │ assignments            │              │
-                        └────────────┬───────────┘              │
-                                     │                          │
-                        ┌────────────┴────────────┐             │
-                        │ HAS DIRECT ASSIGNMENT?  │             │
-                        └────┬────────────────┬───┘             │
-                             │                │                 │
-                          Yes│                │No               │
-                             │                │                 │
-                             ▼                ▼                 │
-               ┌──────────────────┐  ┌────────────────────┐    │
-               │ Ring Assigned    │  │ TIER 2:            │    │
-               │ Agent            │  │ Routing Rules      │    │
-               └────────┬─────────┘  │                    │    │
-                        │            │ Check:             │    │
-                        │            │ call_routing_rules │    │
-                        │            └─────────┬──────────┘    │
-                        │                      │               │
-                        │                      ▼               │
-                        │         ┌─────────────────────────┐  │
-                        │         │ Load Rules by Priority  │  │
-                        │         │ Criteria:               │  │
-                        │         │ • lead_status           │  │
-                        │         │ • state                 │  │
-                        │         │ • tags                  │  │
-                        │         └──────────┬──────────────┘  │
-                        │                    │                 │
-                        │         ┌──────────┴──────────────┐  │
-                        │         │ MATCH CRITERIA?         │  │
-                        │         └──────┬──────────────┬───┘  │
-                        │                │              │      │
-                        │           Match│              │No    │
-                        │           Found│              │Match │
-                        │                │              │      │
-                        │                ▼              ▼      │
-                        │    ┌──────────────────┐      │      │
-                        │    │ Ring Rule-Based  │      │      │
-                        │    │ Agent            │      │      │
-                        │    └────────┬─────────┘      │      │
-                        │             │                │      │
-                        └─────────────┼────────────────┴──────┘
-                                      │
-                                      ▼
-                        ┌─────────────────────────────────┐
-                        │ First Agent to Answer           │
-                        │ Gets the Call                   │
-                        └─────────────┬───────────────────┘
-                                      │
-                                      ▼
-                        ┌─────────────────────────────────┐
-                        │ Log Call with:                  │
-                        │ • Agent ID                      │
-                        │ • Routing Method                │
-                        │   (Direct/Rule/Fallback)        │
-                        │ • Rule ID (if applicable)       │
-                        │ • Timestamp                     │
-                        └─────────────┬───────────────────┘
-                                      │
-                                      ▼
-                        ┌─────────────────────────────────┐
-                        │ Display Contact Context:        │
-                        │ ┌─────────────────────────────┐ │
-                        │ │ • Assigned Agents           │ │
-                        │ │ • Lead Status               │ │
-                        │ │ • Product Interest          │ │
-                        │ │ • Market Segment            │ │
-                        │ │ • State/Location            │ │
-                        │ └─────────────────────────────┘ │
-                        └─────────────┬───────────────────┘
-                                      │
-                                      ▼
-                        ┌─────────────────────────────────┐
-                        │ CALL CONNECTED                  │
-                        │ ✓ Agent informed                │
-                        │ ✓ Context displayed             │
-                        │ ✓ Call logged                   │
-                        └─────────────────────────────────┘
+```mermaid
+flowchart TD
+    Start([Incoming Call]) --> Identify[Identify Contact by<br/>Phone Number]
 
+    Identify --> Decision{Contact Found?}
 
-    ROUTING PRIORITY:
-    ═══════════════════════════════════════════════════════
-    1. TIER 1 - Direct Assignment (Highest Priority)
-       └─> Contact has assigned agent(s)
+    Decision -->|Known Contact| Tier1[Tier 1: Direct Assignment<br/>Check livechat_contact_assignments]
+    Decision -->|Unknown Caller| Tier3Fallback[Tier 3: Fallback<br/>Ring ALL Agents]
 
-    2. TIER 2 - Routing Rules (Medium Priority)
-       └─> Rules match contact criteria
+    Tier1 --> HasDirect{Has Direct<br/>Assignment?}
 
-    3. TIER 3 - Fallback (Lowest Priority)
-       └─> Ring all workspace agents
+    HasDirect -->|Yes| RingDirect[Ring Assigned Agent]
+    HasDirect -->|No| Tier2[Tier 2: Routing Rules<br/>Check call_routing_rules]
+
+    Tier2 --> LoadRules[Load Rules by Priority<br/>Criteria: lead_status, state, tags]
+
+    LoadRules --> EvalRules{Match<br/>Criteria?}
+
+    EvalRules -->|Match Found| RingRule[Ring Rule-Based Agent]
+    EvalRules -->|No Match| Tier3Fallback
+
+    RingDirect --> FirstAnswer[First to Answer Gets Call]
+    RingRule --> FirstAnswer
+    Tier3Fallback --> FirstAnswer
+
+    FirstAnswer --> LogCall[Log Call with:<br/>- Agent ID<br/>- Routing Method<br/>- Rule ID if applicable]
+
+    LogCall --> DisplayContext[Display Contact Context:<br/>- Assigned Agents<br/>- Lead Status<br/>- Product/Market/State]
+
+    DisplayContext --> End([Call Connected])
+
+    style Start fill:#e1f5ff
+    style End fill:#d4edda
+    style Decision fill:#fff3cd
+    style HasDirect fill:#fff3cd
+    style EvalRules fill:#fff3cd
+    style Tier1 fill:#cfe2ff
+    style Tier2 fill:#d1ecf1
+    style Tier3Fallback fill:#f8d7da
+    style RingDirect fill:#d4edda
+    style RingRule fill:#d4edda
+    style FirstAnswer fill:#d4edda
+    style LogCall fill:#d4edda
+    style DisplayContext fill:#d1ecf1
 ```
 
 ---

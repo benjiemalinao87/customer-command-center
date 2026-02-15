@@ -13317,6 +13317,58 @@ body: processedMessageText, // Instead of raw messageData.text
 4. **Key Technical Insights**:
    - **Database Schema Documentation**: Never assume table/column names - always verify with actual database
    - **Silent Failures**: Supabase returns empty results for non-existent tables instead of errors
+
+---
+
+## Duplicate Contact Analysis and Cleanup - January 2025
+
+### Issue: Massive Duplicate Contacts in Database
+
+**Problem**: The contacts table contained **1,199 duplicate contacts** across **285 phone numbers**, with some phone numbers having up to 3 duplicates. This was causing data inconsistency and potential business logic issues.
+
+**Root Cause Analysis**:
+1. **Cross-Workspace Duplicates**: The primary cause was contacts existing in multiple workspaces (e.g., same phone number in workspace 15213 and 39135)
+2. **No Database Constraints**: Missing unique constraints on `(phone_number, workspace_id)` combination
+3. **Race Conditions**: Some duplicates created within seconds of each other due to rapid API calls
+4. **Data Entry Inconsistencies**: Same contact with different names, emails, or metadata
+
+**Technical Findings**:
+- **Total contacts analyzed**: 78,174
+- **Phone numbers with duplicates**: 285 (originally)
+- **Total duplicate contacts**: 1,199
+- **Cross-workspace conflicts**: Primary issue
+- **Time-based duplicates**: Some created within seconds (race conditions)
+- **Name variations**: Different name formats for same contact
+
+**Solution Implemented**:
+1. **Automated Cleanup Script**: Created Node.js script to identify and delete duplicates
+2. **Keep Oldest Strategy**: Retained the oldest contact (by `created_at`) for each phone number
+3. **Foreign Key Handling**: Updated related tables (`livechat_contact_assignments`) to point to kept contacts
+4. **Batch Processing**: Deleted duplicates in batches of 100 to avoid timeouts
+
+**Files Modified**:
+- Database cleanup via Supabase MCP
+- Created analysis script for root cause identification
+
+**Key Lessons Learned**:
+- **Database Constraints**: Always add unique constraints on critical combinations (phone_number, workspace_id)
+- **Duplicate Prevention**: Implement duplicate checking before contact creation, not just cleanup after
+- **Cross-Workspace Logic**: Consider global duplicate checking vs workspace isolation
+- **Race Condition Prevention**: Add debouncing and request queuing for rapid API calls
+- **Data Integrity**: Regular duplicate audits should be part of maintenance routine
+
+**How to Prevent This Issue**:
+1. Add unique constraint: `ALTER TABLE contacts ADD CONSTRAINT unique_phone_workspace UNIQUE (phone_number, workspace_id)`
+2. Implement duplicate checking in API endpoints before insert
+3. Add frontend debouncing for form submissions
+4. Consider global duplicate detection across workspaces
+5. Implement contact merging functionality for legitimate duplicates
+6. Add audit logging for duplicate detection and prevention
+
+**Remaining Issues**:
+- 1 contact still has cross-workspace duplicates (Allison Malinao in workspaces 15213 and 39135)
+- This represents a legitimate business case where same person exists in multiple workspaces
+- Consider implementing contact sharing or workspace-specific contact management
    - **Status Patterns**: Different tables may use different status representations (boolean vs string)
    - **End-to-End Testing**: Test with real data, not assumptions about data structure
 

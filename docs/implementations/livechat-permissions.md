@@ -36,106 +36,42 @@ To implement a robust agent permission system for the livechat application that 
 
 ## 3. User Flow
 
+```mermaid
+graph TD
+    A[Agent Views Contact] --> B{Is Assigned?}
+    B -->|No| C[Show Assign Button]
+    B -->|Yes| D[Show Current Assignees]
+    C --> E[Click Assign]
+    E --> F[Self-Assignment Modal]
+    F --> G[Update Assignment]
+    D --> H[Can Join as Collaborator]
+    H --> I[Click Join]
+    I --> J[Add as Additional Agent]
 ```
-                         ┌──────────────────────┐
-                         │  Agent Views         │
-                         │  Contact             │
-                         └──────────┬───────────┘
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │   Is Assigned?       │
-                         │                      │
-                         └─────┬──────────┬─────┘
-                               │          │
-                          No   │          │   Yes
-                               │          │
-                   ┌───────────▼──┐   ┌──▼──────────────┐
-                   │ Show Assign  │   │ Show Current    │
-                   │ Button       │   │ Assignees       │
-                   └──────┬───────┘   └─────┬───────────┘
-                          │                 │
-                          │                 │
-                ┌─────────▼─────────┐       │
-                │  Click Assign     │       │
-                │  Button           │       │
-                └─────────┬─────────┘       │
-                          │                 │
-                          ▼                 │
-                ┌─────────────────────┐     │
-                │  Self-Assignment    │     │
-                │  Modal              │     │
-                │  - Confirm action   │     │
-                └─────────┬───────────┘     │
-                          │                 │
-                          ▼                 │
-                ┌─────────────────────┐     │
-                │  Update Assignment  │     │
-                │  in Database        │     │
-                └─────────────────────┘     │
-                                            │
-                                            ▼
-                                  ┌─────────────────────┐
-                                  │  Can Join as        │
-                                  │  Collaborator?      │
-                                  └──────────┬──────────┘
-                                             │
-                                             │
-                                   ┌─────────▼─────────┐
-                                   │  Click Join       │
-                                   │  Button           │
-                                   └─────────┬─────────┘
-                                             │
-                                             ▼
-                                   ┌─────────────────────┐
-                                   │  Add as Additional  │
-                                   │  Agent to Contact   │
-                                   └─────────────────────┘
+
+ASCII Version:
+```
+Agent -> Contact View
+  |
+  +-> Assigned? --No--> Show Assign Button --> Self-Assign
+  |
+  +-> Yes --> Show Assignees --> Can Join --> Add as Collaborator
 ```
 
 ## 4. Front-end & Back-end Flow
 
-```
-┌────────┐     ┌─────────┐     ┌──────────┐     ┌──────────┐
-│   UI   │     │   API   │     │ Supabase │     │ RealTime │
-└───┬────┘     └────┬────┘     └────┬─────┘     └────┬─────┘
-    │               │                │                │
-    │ Request       │                │                │
-    │ Assignment    │                │                │
-    ├──────────────►│                │                │
-    │               │                │                │
-    │               │ Update         │                │
-    │               │ contact_       │                │
-    │               │ assignments    │                │
-    │               ├───────────────►│                │
-    │               │                │                │
-    │               │ success        │                │
-    │               │◄───────────────┤                │
-    │               │                │                │
-    │               │                │ Broadcast      │
-    │               │                │ Assignment     │
-    │               │                │ Change         │
-    │               │                ├───────────────►│
-    │               │                │                │
-    │ Assignment    │                │                │
-    │ Confirmed     │                │                │
-    │◄──────────────┤                │                │
-    │               │                │                │
-    │ Subscribe to  │                │                │
-    │ assignment    │                │                │
-    │ changes       │                │                │
-    ├───────────────┼────────────────►│                │
-    │               │                │                │
-    │               │                │                │ Update UI
-    │               │                │                │ for all
-    │               │                │                │ connected
-    │               │                │                │ agents
-    │◄───────────────────────────────┼────────────────┤
-    │               │                │                │
-    │ UI Updated    │                │                │
-    │ with new      │                │                │
-    │ assignment    │                │                │
-    │               │                │                │
+```mermaid
+sequenceDiagram
+    participant UI
+    participant API
+    participant Supabase
+    participant RealTime
+
+    UI->>API: Request Assignment
+    API->>Supabase: Update contact_assignments
+    Supabase->>RealTime: Broadcast Assignment
+    RealTime->>UI: Update UI for all agents
+    UI->>Supabase: Subscribe to assignment changes
 ```
 
 ## 5. File Structure

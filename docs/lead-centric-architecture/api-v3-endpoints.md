@@ -517,9 +517,109 @@ curl -X PUT "https://api-customerconnect.app/api/v3/leads/pipeline/41608/stages/
 
 ---
 
+## Contact Search
+
+### 11. Search Contacts by Phone/Email/Name
+**Endpoint**: `GET /api/v3/contacts/search`
+
+**Description**: Search for contacts by phone number, email, or name with flexible matching.
+
+**Performance**: ~0.9s average response time (90% faster than Node.js backend)
+
+**Query Parameters**:
+- `workspace_id` (required): Workspace ID
+- `phone_number` (optional): Phone number (flexible matching - works with or without formatting)
+- `email` (optional): Email address
+- `name` (optional): Name (searches firstname, lastname, and full name)
+- `contact_id` (optional): Contact UUID
+- `crm_id` (optional): CRM ID (exact match)
+- `include_leads` (optional): Include associated leads (true/false)
+- `limit` (optional): Results per page (default: 20, max: 100)
+
+**Sample Requests**:
+```bash
+# Search by phone number (flexible matching)
+curl "https://api-customerconnect.app/api/v3/contacts/search?workspace_id=76692&phone_number=16267888830" \
+  -H "Authorization: Bearer your_api_key"
+
+# Search by phone with leads
+curl "https://api-customerconnect.app/api/v3/contacts/search?workspace_id=76692&phone_number=16267888830&include_leads=true" \
+  -H "Authorization: Bearer your_api_key"
+
+# Search by email
+curl "https://api-customerconnect.app/api/v3/contacts/search?workspace_id=76692&email=john@example.com" \
+  -H "Authorization: Bearer your_api_key"
+
+# Search by name
+curl "https://api-customerconnect.app/api/v3/contacts/search?workspace_id=76692&name=John" \
+  -H "Authorization: Bearer your_api_key"
+
+# Search by contact ID
+curl "https://api-customerconnect.app/api/v3/contacts/search?workspace_id=76692&contact_id=uuid-here" \
+  -H "Authorization: Bearer your_api_key"
+
+# Search by CRM ID
+curl "https://api-customerconnect.app/api/v3/contacts/search?workspace_id=76692&crm_id=CRM12345" \
+  -H "Authorization: Bearer your_api_key"
+```
+
+**Sample Response**:
+```json
+{
+  "success": true,
+  "count": 1,
+  "data": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "firstname": "John",
+      "lastname": "Doe",
+      "email": "john.doe@example.com",
+      "phone_number": "+16267888830",
+      "tags": ["lead", "qualified"],
+      "custom_fields": {
+        "company": "Acme Corp",
+        "source": "website"
+      },
+      "board_id": "550e8400-e29b-41d4-a716-446655440001",
+      "workspace_id": "76692",
+      "created_at": "2024-01-15T10:30:00Z",
+      "updated_at": "2024-01-15T10:30:00Z",
+      "leads": [
+        {
+          "id": "a3eac740-8c77-456b-9e8e-110449b612a3",
+          "contact_id": "550e8400-e29b-41d4-a716-446655440000",
+          "workspace_id": "76692",
+          "product_interest": "Solar Panels",
+          "estimated_value": 25000,
+          "priority": "high",
+          "temperature": "hot",
+          "stage": "qualified",
+          "qualification_status": "sales_qualified",
+          "timeline": "short_term",
+          "tags": ["solar", "high-value"],
+          "created_at": "2024-01-15T11:00:00Z"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Phone Number Matching**:
+The phone search uses flexible pattern matching to find contacts regardless of formatting:
+- Works with: `16267888830`, `+16267888830`, `1-626-788-8830`, `(626) 788-8830`
+- Automatically strips non-digit characters for matching
+
+**Performance Comparison**:
+- Cloudflare Worker (`/api/v3/contacts/search`): ~0.9s average
+- Node.js Backend (`/api/contacts/enhanced-search`): ~1.7s average
+- **Recommendation**: Use Cloudflare Worker endpoint for production (90% faster)
+
+---
+
 ## Utility Endpoints
 
-### 11. Health Check
+### 12. Health Check
 **Endpoint**: `GET /api/v3/leads/health`
 
 **Description**: Check if the API is healthy and responsive.

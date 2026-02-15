@@ -89,6 +89,10 @@ To handle thousands of conversations, we need to implement the following:
 
 ## Implementation Progress:
 
+### Workflow Automation ✅
+- ✅ Enable Data Storage arrays + Loop merge fields in Trigger.dev workflows
+- ✅ Add in-app guidance for nested loop array paths
+
 ### Phase 1: Production Build Optimization ✅
 - ✅ Configure webpack/build tools to disable source maps
 - ✅ Implement proper code minification

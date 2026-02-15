@@ -434,7 +434,7 @@ Next Steps:
 ✅ Implemented automated changelog generation with webhook integration:
 
 1. **Post-Push Script**:
-   - Created `scripts/post-push-changelog.js` for automated updates
+   - Created `tools/post-push-changelog.js` for automated updates
    - Integrates with Supabase Functions webhook endpoint
    - Proper authentication and headers
    - ES module support

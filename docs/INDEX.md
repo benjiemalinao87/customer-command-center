@@ -228,6 +228,7 @@ Standard operating procedures and operational guides.
 
 | Document | Description |
 |----------|-------------|
+| [agile-team/README_agile-team.md](operations/agile-team/README_agile-team.md) | Agile team playbook: roles, meetings, user stories, and HTML presentation deck |
 | [board-realtime-presence-sop.md](operations/board-realtime-presence-sop.md) | Board real-time presence SOP |
 | [caching-system-sop.md](operations/caching-system-sop.md) | Caching system SOP |
 | [campaign-sop.md](operations/campaign-sop.md) | Campaign management SOP |

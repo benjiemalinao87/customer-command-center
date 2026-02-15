@@ -1,7 +1,7 @@
-import { BarChart3, Activity, UserCheck, BarChart2, Users, FileText, Database, Book, Webhook, TrendingUp, Code, Shield, LogOut, Moon, Sun, ChevronLeft, ChevronRight, AlertTriangle, ScrollText, FileEdit, Calendar, UsersRound } from 'lucide-react';
+import { BarChart3, Activity, UserCheck, BarChart2, Users, FileText, Database, Book, Webhook, TrendingUp, Code, Shield, LogOut, Moon, Sun, ChevronLeft, ChevronRight, AlertTriangle, ScrollText, FileEdit, Calendar, UsersRound, Server } from 'lucide-react';
 import { useState } from 'react';
 
-type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'message-error-logs' | 'system-logs' | 'template-management' | 'schedule-trigger-runs' | 'staff-management';
+type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'message-error-logs' | 'system-logs' | 'template-management' | 'schedule-trigger-runs' | 'staff-management' | 'frontend-infrastructure';
 
 interface SidebarProps {
   currentView: View;
@@ -32,6 +32,7 @@ export function Sidebar({ currentView, onViewChange, darkMode, onToggleDarkMode,
     { id: 'template-management' as View, icon: FileEdit, label: 'Templates' },
     { id: 'schedule-trigger-runs' as View, icon: Calendar, label: 'Schedule Runs' },
     { id: 'staff-management' as View, icon: UsersRound, label: 'Staff' },
+    { id: 'frontend-infrastructure' as View, icon: Server, label: 'Infra' },
     { id: 'admin' as View, icon: Shield, label: 'Admin' },
   ];
 
