@@ -61,7 +61,15 @@ export function FrontendInfrastructure() {
 
   const recordIncident = useCallback((origin: string, status: string, type: IncidentEntry['type']) => {
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const isoTime = new Date().toISOString();
     setIncidents((prev) => [{ time, origin, status, type }, ...prev].slice(0, 100));
+
+    // Persist to KV
+    fetch(INCIDENTS_BASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ time: isoTime, origin, status, type }),
+    }).catch(() => {});
   }, []);
 
   const fetchHealth = useCallback(async (isManual = false) => {
