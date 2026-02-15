@@ -24,6 +24,7 @@ interface DomainCheck {
 
 const HEALTH_URL = 'https://cc1.automate8.com/_gateway/health';
 const HEALTH_HISTORY_BASE = 'https://cc1.automate8.com/_gateway/health-history';
+const INCIDENTS_BASE = 'https://cc1.automate8.com/_gateway/incidents';
 const DOMAINS = [
   { url: 'https://cc1.automate8.com', gateway: true },
   { url: 'https://dash.customerconnects.app', gateway: true },
@@ -164,64 +165,54 @@ export function FrontendInfrastructure() {
   }, [recordIncident]);
 
   const fetchHistoricalData = useCallback(async (hours: number = 24) => {
+    // Format timestamp based on range
+    const formatTime = (ts: string) => {
+      const d = new Date(ts);
+      if (hours <= 24) {
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } else if (hours <= 168) {
+        return d.toLocaleDateString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+      } else {
+        return d.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      }
+    };
+
+    // Fetch chart data and persisted incidents in parallel
+    const [historyRes, incidentsRes] = await Promise.all([
+      fetch(`${HEALTH_HISTORY_BASE}?hours=${hours}`).catch(() => null),
+      fetch(`${INCIDENTS_BASE}?hours=${hours}`).catch(() => null),
+    ]);
+
+    // Seed response history chart
     try {
-      const res = await fetch(`${HEALTH_HISTORY_BASE}?hours=${hours}`);
-      const data = await res.json();
-      if (!data.entries?.length) return;
-
-      // Format timestamp based on range
-      const formatTime = (ts: string) => {
-        const d = new Date(ts);
-        if (hours <= 24) {
-          return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        } else if (hours <= 168) {
-          return d.toLocaleDateString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
-        } else {
-          return d.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        }
-      };
-
-      // Seed response history chart
-      const historyEntries: ResponseHistoryEntry[] = data.entries.map((e: any) => ({
-        time: formatTime(e.timestamp),
-        'cc1.automate8.com': e.responseTimes?.railway ?? null,
-        'dash.customerconnects.app': e.responseTimes?.pages ?? null,
-      }));
-      setResponseHistory(historyEntries);
-
-      // Seed incidents from historical status changes
-      const historicalIncidents: IncidentEntry[] = [];
-      for (let i = 1; i < data.entries.length; i++) {
-        const prev = data.entries[i - 1];
-        const curr = data.entries[i];
-        const time = formatTime(curr.timestamp);
-
-        for (const key of ['railway', 'pages', 'r2'] as const) {
-          if (prev.origins[key] !== curr.origins[key]) {
-            const isHealthy = curr.origins[key] === 'healthy' || curr.origins[key] === 'available';
-            historicalIncidents.push({
-              time,
-              origin: key,
-              status: curr.origins[key],
-              type: isHealthy ? 'recovered' : 'down',
-            });
-          }
-        }
-
-        // Flag slow responses
-        if (curr.responseTimes?.railway >= SLOW_THRESHOLD_MS) {
-          historicalIncidents.push({ time, origin: 'railway', status: `${curr.responseTimes.railway}ms`, type: 'slow' });
-        }
-        if (curr.responseTimes?.pages >= SLOW_THRESHOLD_MS) {
-          historicalIncidents.push({ time, origin: 'pages', status: `${curr.responseTimes.pages}ms`, type: 'slow' });
+      if (historyRes?.ok) {
+        const data = await historyRes.json();
+        if (data.entries?.length) {
+          const historyEntries: ResponseHistoryEntry[] = data.entries.map((e: any) => ({
+            time: formatTime(e.timestamp),
+            'cc1.automate8.com': e.responseTimes?.railway ?? null,
+            'dash.customerconnects.app': e.responseTimes?.pages ?? null,
+          }));
+          setResponseHistory(historyEntries);
         }
       }
-      if (historicalIncidents.length > 0) {
-        setIncidents(historicalIncidents.reverse());
+    } catch { /* no chart data */ }
+
+    // Seed incidents from persisted KV incidents
+    try {
+      if (incidentsRes?.ok) {
+        const data = await incidentsRes.json();
+        if (data.incidents?.length) {
+          const persistedIncidents: IncidentEntry[] = data.incidents.map((inc: any) => ({
+            time: formatTime(inc.time),
+            origin: inc.origin,
+            status: inc.status,
+            type: inc.type as IncidentEntry['type'],
+          }));
+          setIncidents(persistedIncidents.reverse());
+        }
       }
-    } catch (err) {
-      console.log('No historical health data available yet');
-    }
+    } catch { /* no incident data */ }
   }, []);
 
   const refresh = useCallback(async () => {
