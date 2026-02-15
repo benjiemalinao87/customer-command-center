@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Server, Globe, HardDrive, RefreshCw, CheckCircle, XCircle, AlertTriangle, ExternalLink, Clock, Wifi } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface HealthData {
   status: 'operational' | 'degraded';
@@ -22,11 +23,27 @@ interface DomainCheck {
 }
 
 const HEALTH_URL = 'https://cc1.automate8.com/_gateway/health';
+const HEALTH_HISTORY_URL = 'https://cc1.automate8.com/_gateway/health-history?hours=24';
 const DOMAINS = [
   { url: 'https://cc1.automate8.com', gateway: true },
   { url: 'https://dash.customerconnects.app', gateway: true },
   { url: 'https://app2.channelautomation.com', gateway: false, note: 'Direct Railway origin (no gateway)' },
 ];
+
+interface ResponseHistoryEntry {
+  time: string;
+  [domain: string]: number | string | null;
+}
+
+interface IncidentEntry {
+  time: string;
+  origin: string;
+  status: string;
+  type: 'down' | 'slow' | 'recovered';
+}
+
+const MAX_HISTORY = 60; // ~30 min at 30s intervals
+const SLOW_THRESHOLD_MS = 1000;
 
 export function FrontendInfrastructure() {
   const [health, setHealth] = useState<HealthData | null>(null);
@@ -35,6 +52,15 @@ export function FrontendInfrastructure() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [responseHistory, setResponseHistory] = useState<ResponseHistoryEntry[]>([]);
+  const [incidents, setIncidents] = useState<IncidentEntry[]>([]);
+  const domainChecksRef = useRef<DomainCheck[]>([]);
+  const prevHealthRef = useRef<HealthData | null>(null);
+
+  const recordIncident = useCallback((origin: string, status: string, type: IncidentEntry['type']) => {
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    setIncidents((prev) => [{ time, origin, status, type }, ...prev].slice(0, 100));
+  }, []);
 
   const fetchHealth = useCallback(async (isManual = false) => {
     if (isManual) setRefreshing(true);
@@ -43,12 +69,31 @@ export function FrontendInfrastructure() {
       const data: HealthData = await res.json();
       setHealth(data);
       setLastChecked(new Date());
+
+      // Detect origin status changes
+      const prev = prevHealthRef.current;
+      if (prev) {
+        const origins = ['railway', 'pages', 'r2'] as const;
+        for (const key of origins) {
+          const prevStatus = prev.origins[key];
+          const newStatus = data.origins[key];
+          if (prevStatus !== newStatus) {
+            const isHealthy = newStatus === 'healthy' || newStatus === 'available';
+            recordIncident(key, newStatus, isHealthy ? 'recovered' : 'down');
+          }
+        }
+      }
+      prevHealthRef.current = data;
     } catch {
       setHealth(null);
+      if (prevHealthRef.current) {
+        recordIncident('gateway', 'unreachable', 'down');
+      }
+      prevHealthRef.current = null;
     }
     if (isManual) setRefreshing(false);
     setLoading(false);
-  }, []);
+  }, [recordIncident]);
 
   const checkDomains = useCallback(async () => {
     const checks: DomainCheck[] = await Promise.all(
@@ -90,6 +135,83 @@ export function FrontendInfrastructure() {
       })
     );
     setDomainChecks(checks);
+    domainChecksRef.current = checks;
+
+    // Record history entry
+    const now = new Date();
+    const entry: ResponseHistoryEntry = {
+      time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    };
+    for (const check of checks) {
+      if (check.gateway && check.responseTime !== null) {
+        const label = new URL(check.domain).hostname;
+        entry[label] = check.responseTime;
+      }
+    }
+    setResponseHistory((prev) => [...prev.slice(-(MAX_HISTORY - 1)), entry]);
+
+    // Detect slow responses and errors
+    for (const check of checks) {
+      if (!check.gateway) continue;
+      const hostname = new URL(check.domain).hostname;
+      if (check.error) {
+        recordIncident(hostname, check.error, 'down');
+      } else if (check.responseTime && check.responseTime >= SLOW_THRESHOLD_MS) {
+        recordIncident(hostname, `${check.responseTime}ms`, 'slow');
+      }
+    }
+  }, [recordIncident]);
+
+  const fetchHistoricalData = useCallback(async () => {
+    try {
+      const res = await fetch(HEALTH_HISTORY_URL);
+      const data = await res.json();
+      if (!data.entries?.length) return;
+
+      // Seed response history chart
+      const historyEntries: ResponseHistoryEntry[] = data.entries.map((e: any) => {
+        const d = new Date(e.timestamp);
+        return {
+          time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          'cc1.automate8.com': e.responseTimes?.railway ?? null,
+          'dash.customerconnects.app': e.responseTimes?.pages ?? null,
+        };
+      });
+      setResponseHistory(historyEntries);
+
+      // Seed incidents from historical status changes
+      const historicalIncidents: IncidentEntry[] = [];
+      for (let i = 1; i < data.entries.length; i++) {
+        const prev = data.entries[i - 1];
+        const curr = data.entries[i];
+        const time = new Date(curr.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        for (const key of ['railway', 'pages', 'r2'] as const) {
+          if (prev.origins[key] !== curr.origins[key]) {
+            const isHealthy = curr.origins[key] === 'healthy' || curr.origins[key] === 'available';
+            historicalIncidents.push({
+              time,
+              origin: key,
+              status: curr.origins[key],
+              type: isHealthy ? 'recovered' : 'down',
+            });
+          }
+        }
+
+        // Flag slow responses
+        if (curr.responseTimes?.railway >= SLOW_THRESHOLD_MS) {
+          historicalIncidents.push({ time, origin: 'railway', status: `${curr.responseTimes.railway}ms`, type: 'slow' });
+        }
+        if (curr.responseTimes?.pages >= SLOW_THRESHOLD_MS) {
+          historicalIncidents.push({ time, origin: 'pages', status: `${curr.responseTimes.pages}ms`, type: 'slow' });
+        }
+      }
+      if (historicalIncidents.length > 0) {
+        setIncidents(historicalIncidents.reverse());
+      }
+    } catch (err) {
+      console.log('No historical health data available yet');
+    }
   }, []);
 
   const refresh = useCallback(async () => {
@@ -97,9 +219,10 @@ export function FrontendInfrastructure() {
   }, [fetchHealth, checkDomains]);
 
   useEffect(() => {
+    fetchHistoricalData();
     fetchHealth();
     checkDomains();
-  }, [fetchHealth, checkDomains]);
+  }, [fetchHistoricalData, fetchHealth, checkDomains]);
 
   useEffect(() => {
     if (!autoRefresh) return;
@@ -386,6 +509,144 @@ export function FrontendInfrastructure() {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Response Time Chart */}
+      {responseHistory.length >= 2 && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+          {/* Title */}
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">Response Time</h3>
+          <div className="w-20 border-b-2 border-dashed border-gray-300 dark:border-gray-600 mb-4" />
+
+          {/* Legend */}
+          <div className="flex items-center gap-6 mb-5">
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-[#8b5cf6]" />
+              <span className="text-sm text-gray-600 dark:text-gray-400">cc1.automate8.com</span>
+              <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {responseHistory.length > 0 ? `${(responseHistory[responseHistory.length - 1]['cc1.automate8.com'] as number) || 0}ms` : ''}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-[#f97316]" />
+              <span className="text-sm text-gray-600 dark:text-gray-400">dash.customerconnects.app</span>
+              <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {responseHistory.length > 0 ? `${(responseHistory[responseHistory.length - 1]['dash.customerconnects.app'] as number) || 0}ms` : ''}
+              </span>
+            </div>
+          </div>
+
+          {/* Chart */}
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={responseHistory} barGap={1} barCategoryGap="20%">
+              <CartesianGrid
+                horizontal={true}
+                vertical={false}
+                strokeDasharray="none"
+                stroke="#374151"
+                strokeOpacity={0.3}
+              />
+              <XAxis
+                dataKey="time"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 11, fill: '#6b7280' }}
+                interval="preserveStartEnd"
+                dy={8}
+              />
+              <YAxis
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 11, fill: '#6b7280' }}
+                width={35}
+                tickFormatter={(v) => `${v}`}
+              />
+              <Tooltip
+                cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                contentStyle={{
+                  backgroundColor: '#111827',
+                  border: '1px solid #374151',
+                  borderRadius: '8px',
+                  padding: '8px 12px',
+                }}
+                labelStyle={{ color: '#9ca3af', fontSize: 11, marginBottom: 4 }}
+                itemStyle={{ color: '#e5e7eb', fontSize: 12, padding: 0 }}
+                formatter={(value: number, name: string) => [`${value}ms`, name]}
+              />
+              <Bar
+                dataKey="cc1.automate8.com"
+                fill="#8b5cf6"
+                radius={[2, 2, 0, 0]}
+                maxBarSize={12}
+              />
+              <Bar
+                dataKey="dash.customerconnects.app"
+                fill="#f97316"
+                radius={[2, 2, 0, 0]}
+                maxBarSize={12}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Incident & Downtime Log */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            Incident Log
+          </h3>
+          {incidents.length > 0 && (
+            <button
+              onClick={() => setIncidents([])}
+              className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        <div className="max-h-64 overflow-y-auto">
+          {incidents.length === 0 ? (
+            <div className="px-5 py-8 text-center">
+              <CheckCircle className="w-8 h-8 text-green-400 mx-auto mb-2" />
+              <p className="text-sm text-gray-500 dark:text-gray-400">No incidents detected this session</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                Monitoring for downtime, slow responses (&ge;{SLOW_THRESHOLD_MS}ms), and status changes
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-200 dark:divide-gray-700">
+              {incidents.map((incident, idx) => (
+                <div key={idx} className="flex items-center gap-3 px-5 py-3">
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                    incident.type === 'down' ? 'bg-red-500' :
+                    incident.type === 'slow' ? 'bg-yellow-500' :
+                    'bg-green-500'
+                  }`} />
+                  <span className="text-xs text-gray-400 dark:text-gray-500 font-mono w-20 flex-shrink-0">
+                    {incident.time}
+                  </span>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${
+                    incident.type === 'down'
+                      ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                      : incident.type === 'slow'
+                      ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
+                      : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                  }`}>
+                    {incident.type === 'down' ? 'DOWN' : incident.type === 'slow' ? 'SLOW' : 'RECOVERED'}
+                  </span>
+                  <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
+                    {incident.origin}
+                  </span>
+                  <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto flex-shrink-0">
+                    {incident.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
