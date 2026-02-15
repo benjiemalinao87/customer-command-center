@@ -23,7 +23,7 @@ interface DomainCheck {
 }
 
 const HEALTH_URL = 'https://cc1.automate8.com/_gateway/health';
-const HEALTH_HISTORY_URL = 'https://cc1.automate8.com/_gateway/health-history?hours=24';
+const HEALTH_HISTORY_BASE = 'https://cc1.automate8.com/_gateway/health-history';
 const DOMAINS = [
   { url: 'https://cc1.automate8.com', gateway: true },
   { url: 'https://dash.customerconnects.app', gateway: true },
@@ -54,6 +54,7 @@ export function FrontendInfrastructure() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [responseHistory, setResponseHistory] = useState<ResponseHistoryEntry[]>([]);
   const [incidents, setIncidents] = useState<IncidentEntry[]>([]);
+  const [chartRange, setChartRange] = useState<number>(24);
   const domainChecksRef = useRef<DomainCheck[]>([]);
   const prevHealthRef = useRef<HealthData | null>(null);
 
@@ -162,21 +163,30 @@ export function FrontendInfrastructure() {
     }
   }, [recordIncident]);
 
-  const fetchHistoricalData = useCallback(async () => {
+  const fetchHistoricalData = useCallback(async (hours: number = 24) => {
     try {
-      const res = await fetch(HEALTH_HISTORY_URL);
+      const res = await fetch(`${HEALTH_HISTORY_BASE}?hours=${hours}`);
       const data = await res.json();
       if (!data.entries?.length) return;
 
+      // Format timestamp based on range
+      const formatTime = (ts: string) => {
+        const d = new Date(ts);
+        if (hours <= 24) {
+          return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } else if (hours <= 168) {
+          return d.toLocaleDateString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+        } else {
+          return d.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+      };
+
       // Seed response history chart
-      const historyEntries: ResponseHistoryEntry[] = data.entries.map((e: any) => {
-        const d = new Date(e.timestamp);
-        return {
-          time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          'cc1.automate8.com': e.responseTimes?.railway ?? null,
-          'dash.customerconnects.app': e.responseTimes?.pages ?? null,
-        };
-      });
+      const historyEntries: ResponseHistoryEntry[] = data.entries.map((e: any) => ({
+        time: formatTime(e.timestamp),
+        'cc1.automate8.com': e.responseTimes?.railway ?? null,
+        'dash.customerconnects.app': e.responseTimes?.pages ?? null,
+      }));
       setResponseHistory(historyEntries);
 
       // Seed incidents from historical status changes
@@ -184,7 +194,7 @@ export function FrontendInfrastructure() {
       for (let i = 1; i < data.entries.length; i++) {
         const prev = data.entries[i - 1];
         const curr = data.entries[i];
-        const time = new Date(curr.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const time = formatTime(curr.timestamp);
 
         for (const key of ['railway', 'pages', 'r2'] as const) {
           if (prev.origins[key] !== curr.origins[key]) {
@@ -219,10 +229,10 @@ export function FrontendInfrastructure() {
   }, [fetchHealth, checkDomains]);
 
   useEffect(() => {
-    fetchHistoricalData();
+    fetchHistoricalData(chartRange);
     fetchHealth();
     checkDomains();
-  }, [fetchHistoricalData, fetchHealth, checkDomains]);
+  }, [fetchHistoricalData, fetchHealth, checkDomains, chartRange]);
 
   useEffect(() => {
     if (!autoRefresh) return;
@@ -515,8 +525,30 @@ export function FrontendInfrastructure() {
       {/* Response Time Chart */}
       {responseHistory.length >= 2 && (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-          {/* Title */}
-          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">Response Time</h3>
+          {/* Title + Range Selector */}
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Response Time</h3>
+            <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
+              {[
+                { label: '24h', hours: 24 },
+                { label: '7d', hours: 168 },
+                { label: '14d', hours: 336 },
+                { label: '30d', hours: 720 },
+              ].map((opt) => (
+                <button
+                  key={opt.hours}
+                  onClick={() => setChartRange(opt.hours)}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                    chartRange === opt.hours
+                      ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="w-20 border-b-2 border-dashed border-gray-300 dark:border-gray-600 mb-4" />
 
           {/* Legend */}
