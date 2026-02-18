@@ -1,7 +1,7 @@
-import { BarChart3, Activity, UserCheck, BarChart2, Users, FileText, Database, Book, Webhook, TrendingUp, Code, Shield, LogOut, Moon, Sun, ChevronLeft, ChevronRight, AlertTriangle, ScrollText, FileEdit, Calendar, UsersRound, Server, type LucideIcon } from 'lucide-react';
+import { BarChart3, Activity, UserCheck, BarChart2, Users, FileText, Database, Book, Webhook, TrendingUp, Code, Shield, LogOut, Moon, Sun, ChevronLeft, ChevronRight, AlertTriangle, ScrollText, FileEdit, Calendar, UsersRound, Server, Rocket, type LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
-type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'message-error-logs' | 'system-logs' | 'template-management' | 'schedule-trigger-runs' | 'staff-management' | 'frontend-infrastructure';
+type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'message-error-logs' | 'system-logs' | 'template-management' | 'schedule-trigger-runs' | 'staff-management' | 'frontend-infrastructure' | 'feature-rollouts';
 
 interface MenuSection {
   label: string;
@@ -57,6 +57,7 @@ export function Sidebar({ currentView, onViewChange, darkMode, onToggleDarkMode,
     {
       label: 'Tools',
       items: [
+        { id: 'feature-rollouts', icon: Rocket, label: 'Feature Rollouts' },
         { id: 'developer-mode', icon: Code, label: 'Developer' },
         { id: 'template-management', icon: FileEdit, label: 'Templates' },
         { id: 'schedule-trigger-runs', icon: Calendar, label: 'Schedule Runs' },

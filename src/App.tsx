@@ -13,6 +13,7 @@ import { Documentation } from './features/documentation';
 import { WebhookAnalytics } from './features/webhook-analytics';
 import { AnalyticsDashboard } from './features/connection-analytics/AnalyticsDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
+import { FeatureRolloutControl } from './components/FeatureRolloutControl';
 import { DeveloperMode } from './features/developer-mode';
 import { TemplateManagement } from './features/template-management';
 import { ScheduleTriggerRuns } from './features/schedule-trigger-runs';
@@ -23,11 +24,13 @@ import { AccessDenied } from './components/AccessDenied';
 import { Sidebar } from './components/Sidebar';
 import { useSettings } from './shared/components/ui/Settings';
 import { supabase, getCurrentUser } from './lib/supabase';
+import { getSessionViewPath } from './lib/sessionViews';
 import { isUserAllowed } from './lib/allowedUsers';
 import { connectionAnalytics } from './services/connectionAnalytics';
 import { tokenRefreshTracker } from './services/tokenRefreshTracker';
+import { userSessionActivityTracker } from './services/userSessionActivityTracker';
 
-type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'message-error-logs' | 'system-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'template-management' | 'schedule-trigger-runs' | 'staff-management' | 'frontend-infrastructure';
+type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'message-error-logs' | 'system-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'template-management' | 'schedule-trigger-runs' | 'staff-management' | 'frontend-infrastructure' | 'feature-rollouts';
 
 function App() {
   const [currentView, setCurrentView] = useState<View>('dashboard');
@@ -51,7 +54,7 @@ function App() {
     checkAuth();
 
     // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setIsAuthenticated(!!session);
       const email = session?.user?.email || null;
       setUserEmail(email);
@@ -67,12 +70,26 @@ function App() {
       if (session?.user) {
         connectionAnalytics.initialize(null, session.user.id);
         tokenRefreshTracker.initialize(session.user.id);
+        userSessionActivityTracker.initialize({
+          userId: session.user.id,
+          userEmail: session.user.email || null,
+          accessToken: session.access_token,
+          lastSignInAt: session.user.last_sign_in_at || null,
+          currentView,
+          currentPath: getSessionViewPath(currentView),
+          authEvent: event,
+        });
         console.log('[Analytics] Initialized for user:', session.user.id);
+      } else if (event === 'SIGNED_OUT') {
+        void userSessionActivityTracker.handleSignedOut(event);
+      } else {
+        userSessionActivityTracker.reset();
       }
     });
 
     return () => {
       subscription.unsubscribe();
+      userSessionActivityTracker.dispose();
     };
   }, []);
 
@@ -86,9 +103,18 @@ function App() {
     localStorage.setItem('darkMode', String(darkMode));
   }, [darkMode]);
 
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    userSessionActivityTracker.updateView(currentView, getSessionViewPath(currentView));
+  }, [currentView, isAuthenticated]);
+
   const checkAuth = async () => {
     try {
-      const user = await getCurrentUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user || await getCurrentUser();
       setIsAuthenticated(!!user);
       const email = user?.email || null;
       setUserEmail(email);
@@ -99,14 +125,25 @@ function App() {
         // Initialize analytics services with user context
         connectionAnalytics.initialize(null, user.id);
         tokenRefreshTracker.initialize(user.id);
+        userSessionActivityTracker.initialize({
+          userId: user.id,
+          userEmail: email,
+          accessToken: session?.access_token || null,
+          lastSignInAt: user.last_sign_in_at || null,
+          currentView,
+          currentPath: getSessionViewPath(currentView),
+          authEvent: 'INITIAL_SESSION',
+        });
         console.log('[Analytics] Initialized for user:', user.id);
       } else {
         setIsAllowed(null);
+        userSessionActivityTracker.reset();
       }
     } catch (error) {
       console.error('Auth check failed:', error);
       setIsAuthenticated(false);
       setIsAllowed(null);
+      userSessionActivityTracker.reset();
     }
   };
 
@@ -116,7 +153,9 @@ function App() {
 
   const handleLogout = async () => {
     try {
+      await userSessionActivityTracker.markOffline('signed_out');
       await supabase.auth.signOut();
+      userSessionActivityTracker.reset();
       setIsAuthenticated(false);
       setIsAllowed(null);
       setUserEmail(null);
@@ -264,6 +303,10 @@ function App() {
 
             {currentView === 'frontend-infrastructure' && (
               <FrontendInfrastructure />
+            )}
+
+            {currentView === 'feature-rollouts' && (
+              <FeatureRolloutControl />
             )}
 
             {currentView === 'admin' && (

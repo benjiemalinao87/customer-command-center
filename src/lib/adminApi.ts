@@ -50,7 +50,10 @@ const makeAdminRequest = async (endpoint: string, options: RequestInit = {}) => 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     console.error('❌ API Error:', errorData);
-    throw new Error(errorData.error || `API request failed: ${response.statusText}`);
+    const detailBits = [errorData.error, errorData.details, errorData.code]
+      .filter((value) => Boolean(value))
+      .map((value) => String(value));
+    throw new Error(detailBits.join(' | ') || `API request failed: ${response.statusText}`);
   }
 
   const data = await response.json();
@@ -103,6 +106,92 @@ export const adminApi = {
    */
   async getWorkspaceUsage(workspaceId: string) {
     return makeAdminRequest(`/workspaces/${workspaceId}/usage`);
+  },
+
+  /**
+   * Get feature rollout catalog for beta widget controls
+   */
+  async getFeatureRolloutCatalog() {
+    return makeAdminRequest('/feature-rollouts/catalog');
+  },
+
+  /**
+   * Create a feature catalog item for rollout controls
+   */
+  async createFeatureRolloutCatalogItem(payload: {
+    id?: string;
+    title: string;
+    badge?: string;
+    description?: string;
+    ctaLabel?: string;
+    formTitle?: string;
+    formDescription?: string;
+    formEmailLabel?: string;
+    formEmailHint?: string;
+  }) {
+    return makeAdminRequest('/feature-rollouts/catalog', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * Get current feature rollout state for a workspace
+   */
+  async getWorkspaceFeatureRollout(workspaceId: string) {
+    return makeAdminRequest(`/workspaces/${workspaceId}/feature-rollout`);
+  },
+
+  /**
+   * Update feature rollout state for a workspace
+   */
+  async updateWorkspaceFeatureRollout(
+    workspaceId: string,
+    payload: { enabled: boolean; featureId: string | null }
+  ) {
+    return makeAdminRequest(`/workspaces/${workspaceId}/feature-rollout`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * Get feature rollout signup demand for a workspace
+   */
+  async getWorkspaceFeatureRolloutSignups(
+    workspaceId: string,
+    featureId?: string,
+    limit: number = 100
+  ) {
+    const params = new URLSearchParams();
+    params.append('limit', String(limit));
+    if (featureId) {
+      params.append('featureId', featureId);
+    }
+
+    return makeAdminRequest(`/workspaces/${workspaceId}/feature-rollout/signups?${params.toString()}`);
+  },
+
+  /**
+   * Get aggregate feature rollout signup demand across workspaces
+   */
+  async getFeatureRolloutSignups(options?: {
+    workspaceIds?: string[];
+    featureId?: string;
+    limit?: number;
+  }) {
+    const params = new URLSearchParams();
+    params.append('limit', String(options?.limit ?? 100));
+
+    if (options?.featureId) {
+      params.append('featureId', options.featureId);
+    }
+
+    if (options?.workspaceIds && options.workspaceIds.length > 0) {
+      params.append('workspaceIds', options.workspaceIds.join(','));
+    }
+
+    return makeAdminRequest(`/feature-rollouts/signups?${params.toString()}`);
   },
 
   /**

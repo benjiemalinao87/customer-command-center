@@ -5,6 +5,7 @@
  */
 
 import { supabase } from './supabase';
+import { getSessionViewLabel } from './sessionViews';
 
 /**
  * Get total users count from auth.users
@@ -127,7 +128,7 @@ export const getPlatformUsageTrends = async (days: number = 7) => {
     startDate.setDate(startDate.getDate() - days);
 
     // Get API requests by day (if table exists)
-    const { data: apiData, error: apiError } = await supabase
+    const { data: apiData } = await supabase
       .from('api_requests')
       .select('created_at')
       .gte('created_at', startDate.toISOString())
@@ -303,6 +304,142 @@ export const getTopCompaniesByUsage = async () => {
 /**
  * Get active user sessions from Supabase
  */
+interface SessionRpcRecord {
+  session_id: string;
+  user_id: string;
+  user_email: string;
+  created_at: string;
+  updated_at: string | null;
+  refreshed_at: string | null;
+  ip: string | null;
+  user_agent?: string | null;
+  last_sign_in_at?: string | null;
+  current_view?: string | null;
+  current_path?: string | null;
+  current_window?: string | null;
+  current_window_title?: string | null;
+  tracked_last_activity_at?: string | null;
+  tracked_last_sign_in_at?: string | null;
+  page_visits?: number | null;
+  total_events?: number | null;
+  view_counts?: Record<string, number> | null;
+  is_online?: boolean | null;
+}
+
+interface SessionActivityRow {
+  user_id: string;
+  current_view: string | null;
+  current_path: string | null;
+  current_window: string | null;
+  current_window_title?: string | null;
+  last_activity_at: string | null;
+  last_sign_in_at: string | null;
+  page_visits: number | null;
+  total_events: number | null;
+  view_counts: Record<string, number> | null;
+  is_online: boolean | null;
+}
+
+interface PresenceRow {
+  user_id?: string | null;
+  updated_at?: string | null;
+  board_id?: string | null;
+  board_name?: string | null;
+  board_title?: string | null;
+  current_view?: string | null;
+  current_page?: string | null;
+  current_path?: string | null;
+  view?: string | null;
+  path?: string | null;
+  pathname?: string | null;
+  route?: string | null;
+  page?: string | null;
+  screen?: string | null;
+  context?: string | null;
+  current_window?: string | null;
+  current_window_title?: string | null;
+  window?: string | null;
+  active_window?: string | null;
+  active_tab?: string | null;
+  active_view?: string | null;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  metadata?: Record<string, unknown> | null;
+  payload?: Record<string, unknown> | null;
+  state?: Record<string, unknown> | null;
+  location?: string | null;
+  [key: string]: unknown;
+}
+
+interface PresenceRpcRow {
+  user_id?: string | null;
+  updated_at?: string | null;
+  presence?: Record<string, unknown> | null;
+}
+
+const PRESENCE_DIRECT_KEYS = [
+  'active_window',
+  'current_window',
+  'current_window_title',
+  'window',
+  'context',
+  'screen',
+  'page',
+  'current_page',
+  'active_tab',
+  'active_view',
+  'board_name',
+  'board_title',
+  'board_id',
+  'entity_type',
+] as const;
+
+const PRESENCE_ROUTE_KEYS = [
+  'current_view',
+  'view',
+  'route',
+  'current_path',
+  'path',
+  'pathname',
+] as const;
+
+const PRESENCE_CONTAINER_KEYS = ['metadata', 'payload', 'state', 'context'] as const;
+
+const PRESENCE_NESTED_LABEL_KEYS = [
+  'currentWindow',
+  'current_window',
+  'currentWindowTitle',
+  'current_window_title',
+  'activeWindow',
+  'active_window',
+  'activeTab',
+  'active_tab',
+  'activeView',
+  'active_view',
+  'currentPage',
+  'current_page',
+  'page',
+  'screen',
+  'context',
+  'board',
+  'boardId',
+  'board_id',
+  'boardName',
+  'board_name',
+  'boardTitle',
+  'board_title',
+  'entityType',
+  'entity_type',
+  'window',
+  'view',
+  'route',
+  'path',
+  'pathname',
+  'label',
+  'title',
+  'name',
+] as const;
+
 export const getActiveSessions = async () => {
   try {
     // Use RPC function to get sessions with user data
@@ -318,8 +455,10 @@ export const getActiveSessions = async () => {
       return [];
     }
 
+    const typedSessions = sessions as SessionRpcRecord[];
+
     // Get user roles from workspace_members table
-    const userIds = sessions.map((s: any) => s.user_id);
+    const userIds = typedSessions.map((session) => session.user_id);
     const { data: userRoles, error: rolesError } = await supabase
       .from('workspace_members')
       .select('user_id, workspace_id, role')
@@ -340,17 +479,48 @@ export const getActiveSessions = async () => {
       console.warn('Error fetching workspace data:', workspaceError);
     }
 
+    // Pull latest tracked page/window activity data
+    const { data: activityRows, error: activityError } = await supabase
+      .from('user_session_activity')
+      .select('user_id, current_view, current_path, current_window, current_window_title, last_activity_at, last_sign_in_at, page_visits, total_events, view_counts, is_online')
+      .in('user_id', userIds);
+
+    if (activityError) {
+      console.warn('Error fetching user session activity:', activityError);
+    }
+
+    const activityByUserId = new Map<string, SessionActivityRow>();
+    activityRows?.forEach((row) => {
+      const activity = row as SessionActivityRow;
+      const existing = activityByUserId.get(activity.user_id);
+      if (!existing) {
+        activityByUserId.set(activity.user_id, activity);
+        return;
+      }
+
+      const existingLastActivity = parseDateValue(existing.last_activity_at);
+      const rowLastActivity = parseDateValue(activity.last_activity_at);
+      if (!existingLastActivity || (rowLastActivity && rowLastActivity > existingLastActivity)) {
+        activityByUserId.set(activity.user_id, activity);
+      }
+    });
+
+    // Pull existing avatar/presence context (used by "on contacts" style labels)
+    const presenceByUserId = await getPresenceContextByUserId(userIds);
+
     // Process sessions into the expected format
-    const activeSessions = sessions.map((session: any) => {
+    const activeSessions = typedSessions.map((session) => {
       const userRole = userRoles?.find(ur => ur.user_id === session.user_id);
       const workspace = workspaces?.find(w => w.id === userRole?.workspace_id);
-      
+      const trackedActivity = activityByUserId.get(session.user_id);
+      const presenceContext = presenceByUserId.get(session.user_id);
+
       // Calculate session duration
-      const sessionStart = new Date(session.created_at);
+      const sessionStart = parseDateValue(session.created_at) || new Date();
       const now = new Date();
       const durationMs = now.getTime() - sessionStart.getTime();
       const durationMinutes = Math.floor(durationMs / (1000 * 60));
-      
+
       // Format duration
       let sessionDuration = '';
       if (durationMinutes < 60) {
@@ -362,45 +532,83 @@ export const getActiveSessions = async () => {
       }
 
       // Calculate last activity
-      const lastActivity = session.refreshed_at || session.updated_at;
-      const lastActivityDate = new Date(lastActivity);
+      const lastActivity = trackedActivity?.last_activity_at
+        || session.tracked_last_activity_at
+        || session.refreshed_at
+        || session.updated_at
+        || session.created_at;
+
+      const lastActivityDate = parseDateValue(lastActivity) || now;
       const timeSinceActivity = now.getTime() - lastActivityDate.getTime();
-      const minutesSinceActivity = Math.floor(timeSinceActivity / (1000 * 60));
-      
-      let lastActivityText = '';
-      if (minutesSinceActivity < 1) {
-        lastActivityText = 'Just now';
-      } else if (minutesSinceActivity < 60) {
-        lastActivityText = `${minutesSinceActivity} mins ago`;
-      } else {
-        const hoursSinceActivity = Math.floor(minutesSinceActivity / 60);
-        lastActivityText = `${hoursSinceActivity}h ago`;
-      }
+      const minutesSinceActivity = Math.max(0, Math.floor(timeSinceActivity / (1000 * 60)));
+      const lastActivityText = formatLastActivityText(minutesSinceActivity);
 
       // Determine status (active if activity within last 5 minutes)
-      const status = minutesSinceActivity <= 5 ? 'active' : 'idle';
+      const isOnline = trackedActivity?.is_online ?? session.is_online ?? true;
+      const status: 'active' | 'idle' = isOnline && minutesSinceActivity <= 5 ? 'active' : 'idle';
 
       // Extract location from IP (simplified - in production you'd use a geolocation service)
       const location = getLocationFromIP(session.ip);
 
-      // Get most used feature (simplified - in production you'd track this)
-      const mostUsedFeature = getMostUsedFeature(session.user_email);
+      // Build activity insights from real tracked view counts when available
+      const mostUsedFeature = getMostUsedFeatureFromCounts(
+        trackedActivity?.view_counts || session.view_counts
+      ) || getMostUsedFeature(session.user_email);
+
+      const currentPage = getCurrentPageLabel({
+        trackedActivity,
+        presenceContext,
+        sessionCurrentView: session.current_view,
+        sessionCurrentPath: session.current_path,
+        sessionCurrentWindow: session.current_window,
+        sessionCurrentWindowTitle: session.current_window_title,
+        fallbackFeature: trackedActivity || presenceContext ? mostUsedFeature : null,
+      });
+
+      const lastSignIn = formatAbsoluteTime(
+        trackedActivity?.last_sign_in_at
+          || session.tracked_last_sign_in_at
+          || session.last_sign_in_at
+          || session.created_at
+      );
+
+      const pageVisits = sanitizeCount(trackedActivity?.page_visits ?? session.page_visits);
+      const activityEvents = sanitizeCount(trackedActivity?.total_events ?? session.total_events);
+      const hasTrackedSignal = Boolean(
+        trackedActivity
+        || session.tracked_last_activity_at
+        || session.tracked_last_sign_in_at
+        || session.current_view
+        || session.current_path
+        || session.current_window
+        || session.current_window_title
+        || presenceContext
+      );
+      const userEmail = session.user_email || 'unknown@example.com';
+      const userName = userEmail
+        .split('@')[0]
+        .replace(/[._]/g, ' ')
+        .replace(/\b\w/g, (letter: string) => letter.toUpperCase());
 
       return {
-        id: session.session_id,
+        id: session.session_id || `${session.user_id}-${session.created_at}`,
         userId: session.user_id,
-        userName: session.user_email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
-        userEmail: session.user_email,
+        userName,
+        userEmail,
         workspaceName: workspace?.name || 'Unknown Workspace',
         workspaceId: workspace?.id || 'unknown',
         role: (userRole?.role as 'admin' | 'agent' | 'owner') || 'agent',
-        location: location,
+        location,
         loginTime: session.created_at,
+        lastSignIn,
         lastActivity: lastActivityText,
-        sessionDuration: sessionDuration,
-        currentPage: '/dashboard', // Default page
-        mostUsedFeature: mostUsedFeature,
-        status: status
+        sessionDuration,
+        currentPage,
+        pageVisits,
+        activityEvents,
+        mostUsedFeature,
+        status,
+        trackingStatus: hasTrackedSignal ? 'tracked' : 'untracked'
       };
     });
 
@@ -477,7 +685,11 @@ export const getEndpointAnalytics = async () => {
 /**
  * Helper function to get location from IP (simplified)
  */
-function getLocationFromIP(ip: string): string {
+function getLocationFromIP(ip: string | null | undefined): string {
+  if (!ip) {
+    return 'Unknown Location';
+  }
+
   // This is a simplified version - in production you'd use a geolocation service
   const ipRanges = {
     '149.167.': 'San Francisco, CA',
@@ -498,7 +710,11 @@ function getLocationFromIP(ip: string): string {
 /**
  * Helper function to get most used feature (simplified)
  */
-function getMostUsedFeature(email: string): string {
+function getMostUsedFeature(email: string | null | undefined): string {
+  if (!email) {
+    return 'Dashboard';
+  }
+
   // This is a simplified version - in production you'd track actual feature usage
   const features = [
     'Dashboard',
@@ -518,8 +734,327 @@ function getMostUsedFeature(email: string): string {
     hash = ((hash << 5) - hash) + char;
     hash = hash & hash; // Convert to 32-bit integer
   }
-  
+
   return features[Math.abs(hash) % features.length];
+}
+
+function getMostUsedFeatureFromCounts(viewCounts: unknown): string | null {
+  if (!viewCounts || typeof viewCounts !== 'object' || Array.isArray(viewCounts)) {
+    return null;
+  }
+
+  let topView: string | null = null;
+  let topCount = 0;
+
+  Object.entries(viewCounts as Record<string, unknown>).forEach(([viewKey, rawCount]) => {
+    const count = typeof rawCount === 'number' ? rawCount : Number(rawCount);
+    if (!Number.isFinite(count) || count <= topCount) {
+      return;
+    }
+
+    topView = viewKey;
+    topCount = count;
+  });
+
+  return topView ? getSessionViewLabel(topView) : null;
+}
+
+function formatAbsoluteTime(value: string | null | undefined): string {
+  const parsed = parseDateValue(value);
+  if (!parsed) {
+    return 'Unknown';
+  }
+
+  return parsed.toLocaleString('en-US', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatLastActivityText(minutesSinceActivity: number): string {
+  if (minutesSinceActivity < 1) {
+    return 'Just now';
+  }
+
+  if (minutesSinceActivity < 60) {
+    return `${minutesSinceActivity} mins ago`;
+  }
+
+  if (minutesSinceActivity < 24 * 60) {
+    const hoursSinceActivity = Math.floor(minutesSinceActivity / 60);
+    return `${hoursSinceActivity}h ago`;
+  }
+
+  const daysSinceActivity = Math.floor(minutesSinceActivity / (24 * 60));
+  return `${daysSinceActivity}d ago`;
+}
+
+function parseDateValue(value: string | null | undefined): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  return parsedDate;
+}
+
+function sanitizeCount(value: number | null | undefined): number {
+  if (typeof value !== 'number' || Number.isNaN(value) || value < 0) {
+    return 0;
+  }
+
+  return Math.floor(value);
+}
+
+async function getPresenceContextByUserId(userIds: string[]): Promise<Map<string, PresenceRow>> {
+  const map = new Map<string, PresenceRow>();
+  if (userIds.length === 0) {
+    return map;
+  }
+
+  const { data: rpcData, error: rpcError } = await supabase
+    .rpc('get_user_presence_context', { p_user_ids: userIds });
+
+  if (!rpcError && Array.isArray(rpcData)) {
+    mergePresenceRows(map, rpcData as PresenceRpcRow[]);
+    if (map.size > 0) {
+      return map;
+    }
+  } else if (rpcError && rpcError.code !== 'PGRST202') {
+    // Ignore "function not found" so older DBs still use table query fallback.
+    console.warn('Error fetching user presence context via RPC:', rpcError);
+  }
+
+  const { data, error } = await supabase
+    .from('user_presence')
+    .select('*')
+    .in('user_id', userIds);
+
+  if (error) {
+    console.warn('Error fetching user presence context:', error);
+    return map;
+  }
+
+  mergePresenceRows(map, (data as PresenceRow[] | null) || []);
+
+  return map;
+}
+
+function mergePresenceRows(
+  target: Map<string, PresenceRow>,
+  rows: Array<PresenceRow | PresenceRpcRow>,
+): void {
+  rows.forEach((rawRow) => {
+    const row = normalizePresenceRow(rawRow);
+    if (!row) {
+      return;
+    }
+
+    const userId = row.user_id as string;
+    const existing = target.get(userId);
+    if (!existing) {
+      target.set(userId, row);
+      return;
+    }
+
+    const existingUpdatedAt = parseDateValue(existing.updated_at || null);
+    const rowUpdatedAt = parseDateValue(row.updated_at || null);
+    if (!existingUpdatedAt || (rowUpdatedAt && rowUpdatedAt > existingUpdatedAt)) {
+      target.set(userId, row);
+    }
+  });
+}
+
+function normalizePresenceRow(row: PresenceRow | PresenceRpcRow): PresenceRow | null {
+  const userId = toNullableString((row as PresenceRow).user_id);
+  if (!userId) {
+    return null;
+  }
+
+  const rpcPresence = (row as PresenceRpcRow).presence;
+  const basePresence = rpcPresence && typeof rpcPresence === 'object'
+    ? (rpcPresence as Record<string, unknown>)
+    : (row as Record<string, unknown>);
+
+  return {
+    ...basePresence,
+    user_id: userId,
+    updated_at: toNullableString((row as PresenceRow).updated_at) || toNullableString((basePresence as PresenceRow).updated_at),
+  };
+}
+
+function getCurrentPageLabel(input: {
+  trackedActivity?: SessionActivityRow;
+  presenceContext?: PresenceRow;
+  sessionCurrentView?: string | null;
+  sessionCurrentPath?: string | null;
+  sessionCurrentWindow?: string | null;
+  sessionCurrentWindowTitle?: string | null;
+  fallbackFeature?: string | null;
+}): string {
+  const tracked = input.trackedActivity;
+  const presence = input.presenceContext;
+
+  const directLabelCandidates = [
+    tracked?.current_window_title,
+    tracked?.current_window,
+    input.sessionCurrentWindowTitle,
+    input.sessionCurrentWindow,
+    ...collectPresenceCandidates(presence, PRESENCE_DIRECT_KEYS),
+    ...collectPresenceNestedCandidates(presence),
+  ];
+
+  for (const candidate of directLabelCandidates) {
+    const normalized = normalizePresenceLabel(candidate || '');
+    if (normalized !== 'Unknown') {
+      return normalized;
+    }
+  }
+
+  const routeCandidates = [
+    tracked?.current_view,
+    input.sessionCurrentView,
+    tracked?.current_path,
+    input.sessionCurrentPath,
+    ...collectPresenceCandidates(presence, PRESENCE_ROUTE_KEYS),
+  ];
+
+  for (const candidate of routeCandidates) {
+    const normalizedRoute = normalizeRouteCandidate(candidate || '');
+    if (normalizedRoute) {
+      return getSessionViewLabel(normalizedRoute);
+    }
+  }
+
+  if (input.fallbackFeature && input.fallbackFeature !== 'Unknown') {
+    return input.fallbackFeature;
+  }
+
+  return 'Dashboard';
+}
+
+function normalizePresenceLabel(value: string): string {
+  let normalized = value.trim();
+  if (!normalized) {
+    return 'Unknown';
+  }
+
+  normalized = normalized.replace(/^.*\bon\s+(.+?)\s*$/i, '$1').trim();
+  normalized = normalized.replace(/\s*-\s*command center$/i, '').trim();
+  if (!normalized) {
+    return 'Unknown';
+  }
+
+  if (isJunkLabel(normalized)) {
+    return 'Unknown';
+  }
+
+  // If it's route-like, normalize it via view mapper
+  if (normalized.startsWith('/') || normalized.includes('/') || normalized.includes('-') || normalized.includes('_')) {
+    return getSessionViewLabel(normalized);
+  }
+
+  return normalized
+    .replace(/\s+/g, ' ')
+    .split(' ')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function toNullableString(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeRouteCandidate(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const stripped = trimmed.replace(/^.*\bon\s+(.+?)\s*$/i, '$1').trim();
+  if (!stripped || isJunkLabel(stripped)) {
+    return null;
+  }
+
+  return stripped;
+}
+
+function collectPresenceCandidates(
+  presence: PresenceRow | undefined,
+  keys: readonly string[],
+): string[] {
+  if (!presence) {
+    return [];
+  }
+
+  const row = presence as Record<string, unknown>;
+  return keys
+    .map((key) => toNullableString(row[key]))
+    .filter((value): value is string => Boolean(value));
+}
+
+function collectPresenceNestedCandidates(presence: PresenceRow | undefined): string[] {
+  if (!presence) {
+    return [];
+  }
+
+  const row = presence as Record<string, unknown>;
+  const candidates = new Set<string>();
+
+  for (const key of PRESENCE_CONTAINER_KEYS) {
+    const raw = row[key];
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      continue;
+    }
+
+    const container = raw as Record<string, unknown>;
+    for (const nestedKey of PRESENCE_NESTED_LABEL_KEYS) {
+      const candidate = toNullableString(container[nestedKey]);
+      if (candidate) {
+        candidates.add(candidate);
+      }
+    }
+  }
+
+  return Array.from(candidates);
+}
+
+function isJunkLabel(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+
+  if ([
+    'unknown',
+    'n/a',
+    'na',
+    'none',
+    'null',
+    'undefined',
+    'command center',
+    'customer connect command center',
+  ].includes(normalized)) {
+    return true;
+  }
+
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normalized)) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
