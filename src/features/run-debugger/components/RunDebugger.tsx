@@ -111,6 +111,16 @@ export function RunDebugger() {
   const rootStartTime = tree.length > 0 ? Number(tree[0].event.startTime) : 0;
   const totalDuration = tree.length > 0 ? tree[0].event.duration : 1;
 
+  // Compute log-scaled bar widths so short durations are still visible
+  const allDurations = events.map((e) => e.duration).filter((d) => d > 0);
+  const maxDuration = allDurations.length > 0 ? Math.max(...allDurations) : 1;
+  const logBarWidth = (duration: number): number => {
+    if (duration <= 0) return 3;
+    const logVal = Math.log10(duration + 1);
+    const logMax = Math.log10(maxDuration + 1);
+    return Math.max(3, (logVal / logMax) * 100);
+  };
+
   const visibleNodes = flattenTree(tree, expandedSpans);
 
   const filteredNodes =
@@ -138,7 +148,7 @@ export function RunDebugger() {
           <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Run Debugger</h2>
         </div>
         <p className="text-gray-600 dark:text-gray-400 mt-1 ml-10">
-          Inspect Trigger.dev run execution timelines
+          Inspect workflow run execution timelines
         </p>
       </div>
 
@@ -170,7 +180,7 @@ export function RunDebugger() {
           </button>
         </div>
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 ml-1">
-          Paste a Trigger.dev run ID to inspect its execution timeline
+          Paste a run ID to inspect its execution timeline
         </p>
       </div>
 
@@ -347,20 +357,7 @@ export function RunDebugger() {
           {/* Event Rows */}
           <div className="max-h-[600px] overflow-y-auto">
             {filteredNodes.map((node) => {
-              const barWidthPercent =
-                totalDuration > 0
-                  ? Math.max(1, (node.event.duration / totalDuration) * 100)
-                  : 0;
-              const startOffset =
-                totalDuration > 0
-                  ? Math.max(
-                      0,
-                      Math.min(
-                        99,
-                        ((Number(node.event.startTime) - rootStartTime) / totalDuration) * 100
-                      )
-                    )
-                  : 0;
+              const barWidthPercent = logBarWidth(node.event.duration);
 
               const isSelected = selectedSpanId === node.event.spanId;
 
@@ -423,15 +420,14 @@ export function RunDebugger() {
                     </span>
 
                     {/* Duration bar */}
-                    <div className="w-32 h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden flex-shrink-0">
+                    <div className="w-32 h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden flex-shrink-0">
                       <div
-                        className={`h-full rounded-full ${
-                          node.event.isError ? 'bg-red-400' : 'bg-blue-400 dark:bg-blue-500'
+                        className={`h-full rounded-full transition-all ${
+                          node.event.isError
+                            ? 'bg-gradient-to-r from-red-400 to-red-500'
+                            : 'bg-gradient-to-r from-blue-400 to-blue-500 dark:from-blue-500 dark:to-blue-400'
                         }`}
-                        style={{
-                          width: `${Math.min(barWidthPercent, 100 - startOffset)}%`,
-                          marginLeft: `${startOffset}%`,
-                        }}
+                        style={{ width: `${barWidthPercent}%` }}
                       />
                     </div>
 
@@ -588,9 +584,11 @@ export function RunDebugger() {
             <span className="text-xs text-gray-400 dark:text-gray-500">
               {filteredNodes.length} of {events.length} events visible
             </span>
-            <span className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
-              <Zap className="w-3 h-3" />
-              Trigger.dev
+            <span className="text-xs flex items-center gap-1.5 animate-[heartbeat_2s_ease-in-out_infinite]">
+              <Zap className="w-3 h-3 text-blue-400 dark:text-blue-300 drop-shadow-[0_0_4px_rgba(96,165,250,0.6)]" />
+              <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-blue-400 bg-clip-text text-transparent font-semibold tracking-wide bg-[length:200%_auto] animate-[shimmer_3s_linear_infinite] drop-shadow-[0_0_6px_rgba(147,130,220,0.4)]">
+                Customer Connect Engine
+              </span>
             </span>
           </div>
         </div>

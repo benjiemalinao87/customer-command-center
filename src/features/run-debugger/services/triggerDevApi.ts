@@ -10,7 +10,7 @@ const TRIGGER_API_BASE = 'https://api.trigger.dev/api/v1';
 function getApiKey(): string {
   const key = import.meta.env.VITE_TRIGGER_DEV_API_KEY;
   if (!key) {
-    throw new Error('VITE_TRIGGER_DEV_API_KEY is not set. Add it to your .env file.');
+    throw new Error('Workflow engine API key is not configured.');
   }
   return key;
 }
@@ -30,10 +30,10 @@ export async function fetchRunEvents(runId: string): Promise<TriggerRunEventsRes
       throw new Error(`Run "${runId}" not found. Check the run ID and try again.`);
     }
     if (response.status === 401) {
-      throw new Error('Unauthorized. The Trigger.dev API key may be invalid or expired.');
+      throw new Error('Unauthorized. The API key may be invalid or expired.');
     }
     const body = await response.text().catch(() => '');
-    throw new Error(`Trigger.dev API error (${response.status}): ${body || response.statusText}`);
+    throw new Error(`API error (${response.status}): ${body || response.statusText}`);
   }
 
   return response.json();
@@ -47,8 +47,12 @@ export function nanoToDate(nanoStr: string): Date {
 }
 
 export function formatDuration(nanos: number): string {
+  if (nanos <= 0) return '0ns';
+  const us = nanos / 1_000;
+  if (us < 1) return `${Math.round(nanos)}ns`;
   const ms = nanos / 1_000_000;
-  if (ms < 1) return '< 1ms';
+  if (ms < 0.01) return `${us.toFixed(1)}us`;
+  if (ms < 1) return `${ms.toFixed(2)}ms`;
   if (ms < 1000) return `${Math.round(ms)}ms`;
   const seconds = ms / 1000;
   if (seconds < 60) return `${seconds.toFixed(2)}s`;
