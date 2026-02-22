@@ -267,4 +267,67 @@ export const adminApi = {
 
     return makeAdminRequest(`/rate-limit-violations?${params}`);
   },
+
+  /**
+   * Get MCP key + workspace permission management bundle
+   */
+  async getMcpPermissions() {
+    return makeAdminRequest('/mcp-permissions');
+  },
+
+  /**
+   * Create a new MCP API key
+   */
+  async createMcpApiKey(payload: {
+    label: string;
+    staffMemberId?: string | null;
+    defaultRole?: 'none' | 'read' | 'write';
+    wildcardRole?: 'read' | 'write' | null;
+  }) {
+    return makeAdminRequest('/mcp-permissions/keys', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * Update an existing MCP API key's metadata
+   */
+  async updateMcpApiKey(
+    keyId: string,
+    payload: {
+      label?: string;
+      staffMemberId?: string | null;
+      defaultRole?: 'none' | 'read' | 'write';
+      wildcardRole?: 'read' | 'write' | null;
+      isActive?: boolean;
+    }
+  ) {
+    return makeAdminRequest(`/mcp-permissions/keys/${keyId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * Replace workspace permissions for a key
+   */
+  async setMcpWorkspacePermissions(
+    keyId: string,
+    permissions: Array<{ workspaceId: string; role: 'read' | 'write' }>
+  ) {
+    return makeAdminRequest(`/mcp-permissions/keys/${keyId}/workspaces`, {
+      method: 'PUT',
+      body: JSON.stringify({ permissions }),
+    });
+  },
+
+  /**
+   * Delete an MCP key
+   */
+  async deleteMcpApiKey(keyId: string) {
+    return makeAdminRequest(`/mcp-permissions/keys/${keyId}`, {
+      method: 'DELETE',
+    });
+  },
 };

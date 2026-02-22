@@ -20,6 +20,7 @@ const SESSION_VIEW_LABELS: Record<string, string> = {
   'template-management': 'Template Management',
   'schedule-trigger-runs': 'Schedule Trigger Runs',
   'staff-management': 'Staff Management',
+  'mcp-permissions': 'MCP Access',
   'frontend-infrastructure': 'Frontend Infrastructure',
   'feature-rollouts': 'Feature Rollouts',
 };

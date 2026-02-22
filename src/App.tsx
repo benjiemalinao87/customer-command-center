@@ -18,6 +18,7 @@ import { DeveloperMode } from './features/developer-mode';
 import { TemplateManagement } from './features/template-management';
 import { ScheduleTriggerRuns } from './features/schedule-trigger-runs';
 import { StaffManagement } from './features/staff-management';
+import { McpPermissions } from './features/mcp-permissions';
 import { FrontendInfrastructure } from './features/frontend-infrastructure';
 import { Login } from './components/Login';
 import { AccessDenied } from './components/AccessDenied';
@@ -30,7 +31,7 @@ import { connectionAnalytics } from './services/connectionAnalytics';
 import { tokenRefreshTracker } from './services/tokenRefreshTracker';
 import { userSessionActivityTracker } from './services/userSessionActivityTracker';
 
-type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'message-error-logs' | 'system-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'template-management' | 'schedule-trigger-runs' | 'staff-management' | 'frontend-infrastructure' | 'feature-rollouts';
+type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'message-error-logs' | 'system-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'template-management' | 'schedule-trigger-runs' | 'staff-management' | 'frontend-infrastructure' | 'feature-rollouts' | 'mcp-permissions';
 
 function App() {
   const [currentView, setCurrentView] = useState<View>('dashboard');
@@ -307,6 +308,10 @@ function App() {
 
             {currentView === 'feature-rollouts' && (
               <FeatureRolloutControl />
+            )}
+
+            {currentView === 'mcp-permissions' && (
+              <McpPermissions />
             )}
 
             {currentView === 'admin' && (
