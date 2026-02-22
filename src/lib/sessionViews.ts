@@ -23,6 +23,7 @@ const SESSION_VIEW_LABELS: Record<string, string> = {
   'mcp-permissions': 'MCP Access',
   'frontend-infrastructure': 'Frontend Infrastructure',
   'feature-rollouts': 'Feature Rollouts',
+  'run-debugger': 'Run Debugger',
 };
 
 const normalizeViewValue = (value: string | null | undefined): string => {
