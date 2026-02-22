@@ -1,6 +1,6 @@
 /**
  * Login Component
- * Provides Supabase authentication for admin and user access
+ * Provides Supabase authentication for authorized admin access
  */
 
 import { useState } from 'react';
