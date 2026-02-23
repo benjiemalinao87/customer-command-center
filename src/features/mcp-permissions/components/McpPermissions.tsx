@@ -35,6 +35,8 @@ interface McpKey {
   created_at: string;
   updated_at: string;
   last_used_at: string | null;
+  created_by_email?: string | null;
+  created_by_name?: string | null;
   permissions: KeyPermission[];
 }
 
@@ -551,6 +553,10 @@ export function McpPermissions() {
                       prefix: {key.key_prefix}
                     </span>
                     <span>{assignedStaff ? `staff: ${assignedStaff.full_name || assignedStaff.email}` : 'staff: unassigned'}</span>
+                    <span className="px-2 py-1 rounded bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300">
+                      created by: {key.created_by_name || key.created_by_email || 'unknown'}
+                    </span>
+                    <span>created: {new Date(key.created_at).toLocaleString()}</span>
                     <span>exact workspace grants: {permissionCount}</span>
                     <span>last used: {key.last_used_at ? new Date(key.last_used_at).toLocaleString() : 'never'}</span>
                     <span className={`border px-2 py-1 rounded ${summaryToneClasses(effectiveAccess.tone)}`}>
