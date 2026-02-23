@@ -1,7 +1,7 @@
 # Workflow Guardrails & Safety Architecture
 
 > **Audience**: New developers and interns working on the workflow engine
-> **Last updated**: February 2026
+> **Last updated**: February 2026 (per-channel opt-out update)
 > **Primary file**: `trigger/unifiedWorkflows.js` (~13,000 lines)
 
 This document explains how the system prevents accidental SMS/email sending through multiple layers of safety checks. The philosophy is **defense in depth** — even if one check is bypassed, the next one catches it.
@@ -117,10 +117,11 @@ This is the complete flow from workflow start to actual SMS/email delivery:
               ▼                               │
    ┌─────────────────────┐                    │
    │ 3. PRE-DELAY        │                    │
-   │    DNC CHECK        │                    │
+   │    CHANNEL CHECK    │                    │
    │                     │                    │
    │ SELECT lead_status, │                    │
-   │   opted_in_sms      │                    │
+   │   opted_in_sms,     │                    │
+   │   opted_in_email    │                    │
    │ FROM contacts       │                    │
    └────────┬────────────┘                    │
             │                                 │
@@ -137,22 +138,16 @@ This is the complete flow from workflow start to actual SMS/email delivery:
    └────────┬────────────┘                    │
             │ Query OK                        │
             ▼                                 │
-   ┌─────────────────────┐                    │
-   │ lead_status = DNC?  │                    │
-   │                     │                    │
-   │  YES → 🛑 STOP      │                    │
-   │  shouldStopWorkflow │                    │
-   │  = true             │                    │
-   └────────┬────────────┘                    │
-            │ Not DNC                         │
-            ▼                                 │
-   ┌─────────────────────┐                    │
-   │ opted_in_sms=false? │                    │
-   │                     │                    │
-   │  YES → 🛑 STOP      │                    │
-   │  reason: SMS_OPT_OUT│                    │
-   └────────┬────────────┘                    │
-            │ Opted in                        │
+   ┌──────────────────────────┐               │
+   │ ALL channels opted out?  │               │
+   │                          │               │
+   │ (DNC or sms_out) AND     │               │
+   │  email_out → 🛑 STOP     │               │
+   │                          │               │
+   │ At least 1 channel       │               │
+   │  active → ⏩ CONTINUE    │               │
+   └────────┬─────────────────┘               │
+            │ At least 1 active               │
             ▼                                 │
    ┌─────────────────────┐                    │
    │                     │                    │
@@ -168,19 +163,21 @@ This is the complete flow from workflow start to actual SMS/email delivery:
    └────────┬────────────┘                    │
             │ Delay complete                  │
             ▼                                 │
-   ┌─────────────────────┐                    │
-   │ 4. POST-DELAY       │                    │
-   │    DNC RE-CHECK     │                    │
-   │                     │                    │
-   │ Same checks again:  │                    │
-   │ • DB error → BLOCK  │                    │
-   │ • DNC → STOP        │                    │
-   │ • opted_out → STOP  │                    │
-   │                     │                    │
-   │ (Contact may have   │                    │
-   │  replied "STOP"     │                    │
-   │  during the delay)  │                    │
-   └────────┬────────────┘                    │
+   ┌──────────────────────────┐               │
+   │ 4. POST-DELAY            │               │
+   │    CHANNEL RE-CHECK      │               │
+   │                          │               │
+   │ Same check again:        │               │
+   │ • DB error → BLOCK       │               │
+   │ • ALL channels out       │               │
+   │   → 🛑 STOP              │               │
+   │ • 1+ channel active      │               │
+   │   → ⏩ CONTINUE          │               │
+   │                          │               │
+   │ (Contact may have        │               │
+   │  replied "STOP"          │               │
+   │  during the delay)       │               │
+   └────────┬─────────────────┘               │
             │ Still OK                        │
             ▼                                 │
             └──────────────┬──────────────────┘
@@ -221,33 +218,34 @@ This is the complete flow from workflow start to actual SMS/email delivery:
 └──────┬───────┘                   └──────┬───────┘
        │                                  │
        ▼                                  ▼
-┌────────────────────┐          ┌────────────────────┐
-│ 6a. FINAL DNC      │          │ 6b. FINAL DNC      │
-│     CHECK (SMS)    │          │     CHECK (EMAIL)  │
-│                    │          │                    │
-│ SELECT lead_status,│          │ SELECT lead_status,│
-│  opted_in_sms,     │          │  opted_in_email,   │
-│  name, phone       │          │  name, email       │
-│ FROM contacts      │          │ FROM contacts      │
-└────────┬───────────┘          └────────┬───────────┘
+┌─────────────────────────┐     ┌─────────────────────────┐
+│ 6a. FINAL CHECK (SMS)   │     │ 6b. FINAL CHECK (EMAIL) │
+│                         │     │                         │
+│ SELECT lead_status,     │     │ SELECT lead_status,     │
+│  opted_in_sms,          │     │  opted_in_sms,          │
+│  opted_in_email,        │     │  opted_in_email,        │
+│  name, phone            │     │  name, email            │
+│ FROM contacts           │     │ FROM contacts           │
+└────────┬────────────────┘     └────────┬────────────────┘
          │                               │
          ▼                               ▼
-┌────────────────────┐          ┌────────────────────┐
-│ DB error?          │          │ DB error?          │
-│ → BLOCK SMS        │          │ → BLOCK EMAIL      │
-│ "Cannot verify"    │          │ "Cannot verify"    │
-│                    │          │                    │
-│ Contact not found? │          │ Contact not found? │
-│ → BLOCK SMS        │          │ → BLOCK EMAIL      │
-│                    │          │                    │
-│ lead_status = DNC? │          │ lead_status = DNC? │
-│ → BLOCK SMS        │          │ → BLOCK EMAIL      │
-│                    │          │                    │
-│ opted_in_sms       │          │ opted_in_email     │
-│   === false?       │          │   === false?       │
-│ → BLOCK SMS        │          │ → BLOCK EMAIL      │
-└────────┬───────────┘          └────────┬───────────┘
-         │ ALL PASSED                    │ ALL PASSED
+┌─────────────────────────┐     ┌─────────────────────────┐
+│ DB error / not found?   │     │ DB error / not found?   │
+│ → 🛑 STOP WORKFLOW      │     │ → 🛑 STOP WORKFLOW      │
+│                         │     │                         │
+│ DNC or sms_opt_out?     │     │ DNC? (email still in?)  │
+│ → email active?         │     │ → opted_in_email=true?  │
+│   YES → ⏭️ SKIP SMS     │     │   YES → 📧 SEND EMAIL  │
+│         continue wkflow │     │   NO  → check SMS...   │
+│   NO  → 🛑 STOP (all   │     │                         │
+│         channels out)   │     │ email_opt_out?          │
+│                         │     │ → SMS active (not DNC)? │
+│                         │     │   YES → ⏭️ SKIP EMAIL   │
+│                         │     │         continue wkflow │
+│                         │     │   NO  → 🛑 STOP (all   │
+│                         │     │         channels out)   │
+└────────┬────────────────┘     └────────┬────────────────┘
+         │ PASSED                        │ PASSED
          ▼                               ▼
 ┌────────────────────┐          ┌────────────────────┐
 │ ✅ SEND via Twilio │          │ ✅ SEND via Resend │
@@ -271,13 +269,12 @@ This is the complete flow from workflow start to actual SMS/email delivery:
   │ stepResult.stopped?             │         remaining
   │                                 │         workflow
   │ Reasons:                        │
-  │  • DNC detected                 │
-  │  • SMS/Email opt-out            │
-  │  • Lead status changed          │
+  │  • ALL channels opted out       │
   │  • DNC check failed (fail-safe) │
+  │  • Lead status changed          │
   │  • Condition otherwise:stop     │
   └─────────────┬───────────────────┘
-                │ NO
+                │ NO (includes ⏭️ skipped steps)
                 ▼
         ┌───────────────┐
         │ Next node...  │ ← loop continues
@@ -336,8 +333,9 @@ Understanding what gets re-checked after delays is critical for knowing where th
   │         (after every delay/wait step completes)                │
   ├─────────────────────────────────────────────────────────────────┤
   │                                                                 │
-  │  ✅ lead_status = 'DNC'       → stop workflow                  │
-  │  ✅ opted_in_sms === false    → stop workflow                  │
+  │  ✅ ALL channels opted out    → stop workflow                  │
+  │     (DNC/sms_out AND email_out = both channels down)           │
+  │  ⏩ Single channel out        → continue (skip that send only) │
   │  ✅ contact not found         → stop workflow                  │
   │  ✅ DB query failed           → stop workflow (fail-safe)      │
   │                                                                 │
@@ -504,15 +502,16 @@ One-click unsubscribe from email footer: `opted_in_email: false`
                                │        │        │            │ delay)   │
   Advanced conditions          │   -    │   ✅   │     ❌     │    ❌    │  ❌
    (custom field filters)      │        │        │            │          │
-  DNC (lead_status='DNC')      │   -    │   ✅*  │     ✅     │    -     │  ✅
-  opted_in_sms === false       │   -    │   ✅*  │     ✅     │    -     │  ✅
-  opted_in_email === false     │   -    │   -    │     ❌**   │    -     │  ✅
+  ALL channels opted out       │   -    │   ✅*  │     ✅     │    -     │  ✅
+   (DNC/sms_out AND email_out) │        │        │  → STOP    │          │ → STOP
+  Single channel opted out     │   -    │   -    │     ✅     │    -     │  ✅
+   (sms_out OR email_out only) │        │        │  → CONT.   │          │ → SKIP
   Contact not found            │   -    │   -    │     ✅     │    -     │  ✅
   DB query fail-safe           │   ✅   │   -    │     ✅     │    -     │  ✅
 
-  * DNC/opt-out at enrollment is checked via pre-delay DNC check
-  ** Post-delay only checks opted_in_sms, NOT opted_in_email.
-     However, sendEmailDirectly() checks opted_in_email at send time.
+  * DNC/opt-out at enrollment is checked via pre-delay channel check
+  Note: Single channel opt-out skips the blocked send step but
+  continues the workflow so the other channel's steps can execute.
 ```
 
 ---
@@ -526,8 +525,9 @@ One-click unsubscribe from email footer: `opted_in_email: false`
    - **Hard** (always enforced): Sandbox, DNC, `opted_in_sms`, `opted_in_email` — cannot be bypassed
    - **Soft** (configurable): Stop on response, lead status filter, advanced conditions — controlled by sequence/flow settings
 4. **Test mode**: When `isTest: true`, absolutely nothing is sent — all external calls return mock results
-5. **Stop propagation**: After ANY step returns `shouldStopWorkflow: true`, the entire remaining workflow is cancelled
-6. **Multi-campaign safety**: Stop-on-response is per-execution, so a reply on one campaign doesn't kill other campaigns (when toggle is OFF)
+5. **Per-channel opt-out**: SMS opt-out only skips SMS steps; email opt-out only skips email steps. The workflow continues so the other channel's steps can execute. Only when ALL channels are opted out does the entire workflow stop.
+6. **Stop propagation**: After ANY step returns `shouldStopWorkflow: true`, the entire remaining workflow is cancelled. Skipped steps (per-channel opt-out) do NOT trigger stop propagation.
+7. **Multi-campaign safety**: Stop-on-response is per-execution, so a reply on one campaign doesn't kill other campaigns (when toggle is OFF)
 
 ### The one scenario that matters most:
 
