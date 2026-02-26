@@ -7,6 +7,7 @@
 
 const BACKEND_BASE = import.meta.env.VITE_ADMIN_API_URL?.replace('/api/admin', '') || 'https://cc.automate8.com';
 const QUEUE_PROXY_BASE = `${BACKEND_BASE}/api/queue/trigger-queues`;
+const RUNS_PROXY_BASE = `${BACKEND_BASE}/api/queue/trigger-runs`;
 
 async function queueApiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${QUEUE_PROXY_BASE}${path}`;
@@ -111,4 +112,24 @@ export async function resumeQueue(queueName: string): Promise<void> {
     `/${encodeURIComponent(queueName)}/resume`,
     { method: 'POST' }
   );
+}
+
+// --- Run Counts (source of truth for executing/waiting) ---
+
+export interface RunCounts {
+  executing: number;
+  waiting: number;
+  executingHasMore: boolean;
+  waitingHasMore: boolean;
+}
+
+export async function getRunCounts(): Promise<RunCounts> {
+  const url = `${RUNS_PROXY_BASE}/counts`;
+  const response = await fetch(url, {
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+  });
+  if (!response.ok) {
+    throw new Error(`Run counts API error (${response.status})`);
+  }
+  return response.json();
 }

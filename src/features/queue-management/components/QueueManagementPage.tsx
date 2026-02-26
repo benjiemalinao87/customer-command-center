@@ -8,13 +8,16 @@ import {
   resetConcurrency,
   pauseQueue,
   resumeQueue,
+  getRunCounts,
   type QueueInfo,
+  type RunCounts,
 } from '../services/queueApi';
 
 type Tab = 'queues' | 'tiers';
 
 export function QueueManagementPage() {
   const [queues, setQueues] = useState<QueueInfo[]>([]);
+  const [runCounts, setRunCounts] = useState<RunCounts | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,8 +27,13 @@ export function QueueManagementPage() {
   const fetchQueues = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     try {
-      const response = await listQueues(1, 100);
+      // Fetch queue list and accurate run counts in parallel
+      const [response, counts] = await Promise.all([
+        listQueues(1, 100),
+        getRunCounts().catch(() => null),
+      ]);
       setQueues(response.data || []);
+      setRunCounts(counts);
       setLastUpdated(new Date());
       setError(null);
     } catch (err) {
@@ -69,8 +77,9 @@ export function QueueManagementPage() {
     return a.name.localeCompare(b.name);
   });
 
-  // Summary stats
-  const totalRunning = queues.reduce((sum, q) => sum + q.running, 0);
+  // Summary stats — use runs API for accurate executing/waiting counts
+  const totalExecuting = runCounts?.executing ?? queues.reduce((sum, q) => sum + q.running, 0);
+  const totalWaiting = runCounts?.waiting ?? 0;
   const totalQueued = queues.reduce((sum, q) => sum + q.queued, 0);
   const pausedCount = queues.filter((q) => q.paused).length;
 
@@ -128,14 +137,22 @@ export function QueueManagementPage() {
       )}
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-5 gap-4">
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
           <div className="text-sm text-gray-500 dark:text-gray-400">Total Queues</div>
           <div className="text-3xl font-bold text-gray-900 dark:text-gray-100 mt-1">{queues.length}</div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-          <div className="text-sm text-gray-500 dark:text-gray-400">Total Running</div>
-          <div className="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-1">{totalRunning}</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Executing</div>
+          <div className="text-3xl font-bold text-green-600 dark:text-green-400 mt-1">
+            {totalExecuting}{runCounts?.executingHasMore ? '+' : ''}
+          </div>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+          <div className="text-sm text-gray-500 dark:text-gray-400">Waiting</div>
+          <div className="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-1">
+            {totalWaiting}{runCounts?.waitingHasMore ? '+' : ''}
+          </div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
           <div className="text-sm text-gray-500 dark:text-gray-400">Total Queued</div>
@@ -162,9 +179,9 @@ export function QueueManagementPage() {
           >
             <Activity className="w-4 h-4" />
             Queue Status
-            {totalRunning > 0 && (
+            {totalExecuting > 0 && (
               <span className="ml-1 px-1.5 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full">
-                {totalRunning}
+                {totalExecuting}
               </span>
             )}
           </button>
