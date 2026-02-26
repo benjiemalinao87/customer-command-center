@@ -21,6 +21,7 @@ import { StaffManagement } from './features/staff-management';
 import { McpPermissions } from './features/mcp-permissions';
 import { FrontendInfrastructure } from './features/frontend-infrastructure';
 import { RunDebugger } from './features/run-debugger';
+import { QueueManagementPage } from './features/queue-management';
 import { Login } from './components/Login';
 import { AccessDenied } from './components/AccessDenied';
 import { Sidebar } from './components/Sidebar';
@@ -32,7 +33,7 @@ import { connectionAnalytics } from './services/connectionAnalytics';
 import { tokenRefreshTracker } from './services/tokenRefreshTracker';
 import { userSessionActivityTracker } from './services/userSessionActivityTracker';
 
-type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'message-error-logs' | 'system-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'template-management' | 'schedule-trigger-runs' | 'staff-management' | 'frontend-infrastructure' | 'feature-rollouts' | 'mcp-permissions' | 'run-debugger';
+type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'message-error-logs' | 'system-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'template-management' | 'schedule-trigger-runs' | 'staff-management' | 'frontend-infrastructure' | 'feature-rollouts' | 'mcp-permissions' | 'run-debugger' | 'queue-management';
 
 function App() {
   const [currentView, setCurrentView] = useState<View>('dashboard');
@@ -317,6 +318,10 @@ function App() {
 
             {currentView === 'run-debugger' && (
               <RunDebugger />
+            )}
+
+            {currentView === 'queue-management' && (
+              <QueueManagementPage />
             )}
 
             {currentView === 'admin' && (

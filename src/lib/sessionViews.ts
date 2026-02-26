@@ -24,6 +24,7 @@ const SESSION_VIEW_LABELS: Record<string, string> = {
   'frontend-infrastructure': 'Frontend Infrastructure',
   'feature-rollouts': 'Feature Rollouts',
   'run-debugger': 'Run Debugger',
+  'queue-management': 'Queue Management',
 };
 
 const normalizeViewValue = (value: string | null | undefined): string => {
