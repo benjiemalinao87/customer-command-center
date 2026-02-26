@@ -444,18 +444,42 @@ export function RunDebugger() {
 
                   {/* Expanded detail panel */}
                   {isSelected && selectedEvent && (
-                    <div className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700 px-6 py-4 space-y-4">
+                      {/* Timestamp */}
+                      <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
+                        <Clock className="w-3.5 h-3.5" />
+                        <span className="font-medium">Timestamp</span>
+                        <span className="font-mono">
+                          {formatFullTimestamp(nanoToDate(selectedEvent.startTime))}
+                        </span>
+                      </div>
+
+                      {/* Message */}
+                      <div>
+                        <h4 className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase mb-1.5">
+                          Message
+                        </h4>
+                        <p className={`text-sm font-medium ${
+                          selectedEvent.isError
+                            ? 'text-red-700 dark:text-red-400'
+                            : 'text-gray-900 dark:text-gray-100'
+                        }`}>
+                          {selectedEvent.message}
+                        </p>
+                      </div>
+
+                      {/* Metadata grid */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         <div>
-                          <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase">
+                          <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase">
                             Span ID
                           </span>
-                          <p className="mt-0.5 font-mono text-xs text-gray-700 dark:text-gray-300">
+                          <p className="mt-0.5 font-mono text-xs text-gray-600 dark:text-gray-300 truncate" title={selectedEvent.spanId}>
                             {selectedEvent.spanId}
                           </p>
                         </div>
                         <div>
-                          <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase">
+                          <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase">
                             Level
                           </span>
                           <p className="mt-0.5">
@@ -475,47 +499,37 @@ export function RunDebugger() {
                           </p>
                         </div>
                         <div>
-                          <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase">
+                          <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase">
                             Duration
                           </span>
-                          <p className="mt-0.5 font-mono text-xs text-gray-700 dark:text-gray-300">
+                          <p className="mt-0.5 font-mono text-xs text-gray-600 dark:text-gray-300">
                             {formatDuration(selectedEvent.duration)}
                           </p>
                         </div>
                         <div>
-                          <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase">
+                          <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase">
                             Start Time
                           </span>
-                          <p className="mt-0.5 font-mono text-xs text-gray-700 dark:text-gray-300">
+                          <p className="mt-0.5 font-mono text-xs text-gray-600 dark:text-gray-300">
                             {formatFullTimestamp(nanoToDate(selectedEvent.startTime))}
                           </p>
                         </div>
                         {selectedEvent.attemptNumber !== null && (
                           <div>
-                            <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase">
+                            <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase">
                               Attempt
                             </span>
-                            <p className="mt-0.5 font-mono text-xs text-gray-700 dark:text-gray-300">
+                            <p className="mt-0.5 font-mono text-xs text-gray-600 dark:text-gray-300">
                               #{selectedEvent.attemptNumber}
-                            </p>
-                          </div>
-                        )}
-                        {selectedEvent.kind !== 'UNSPECIFIED' && (
-                          <div>
-                            <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase">
-                              Kind
-                            </span>
-                            <p className="mt-0.5 font-mono text-xs text-gray-700 dark:text-gray-300">
-                              {selectedEvent.kind}
                             </p>
                           </div>
                         )}
                         {selectedEvent.parentId && (
                           <div>
-                            <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase">
+                            <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase">
                               Parent Span
                             </span>
-                            <p className="mt-0.5 font-mono text-xs text-gray-700 dark:text-gray-300">
+                            <p className="mt-0.5 font-mono text-xs text-gray-600 dark:text-gray-300 truncate" title={selectedEvent.parentId}>
                               {selectedEvent.parentId}
                             </p>
                           </div>
@@ -524,7 +538,7 @@ export function RunDebugger() {
 
                       {/* Sub-events */}
                       {selectedEvent.events.length > 0 && (
-                        <div className="mt-4">
+                        <div>
                           <h4 className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase mb-2">
                             Sub-events ({selectedEvent.events.length})
                           </h4>
