@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Loader2, AlertCircle, Layers, Activity, Users } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { RefreshCw, Loader2, AlertCircle, Layers, Activity, Users, Search, X } from 'lucide-react';
 import { QueueStatusCard } from './QueueStatusCard';
 import { WorkspaceTierTable } from './WorkspaceTierTable';
 import {
@@ -23,6 +23,8 @@ export function QueueManagementPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('queues');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'custom' | 'task'>('all');
 
   const fetchQueues = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -70,12 +72,31 @@ export function QueueManagementPage() {
     await fetchQueues(true);
   };
 
-  // Sort by running (desc), then queued (desc), then name (asc)
-  const sortedQueues = [...queues].sort((a, b) => {
-    if (b.running !== a.running) return b.running - a.running;
-    if (b.queued !== a.queued) return b.queued - a.queued;
-    return a.name.localeCompare(b.name);
-  });
+  // Filter then sort by running (desc), queued (desc), name (asc)
+  const filteredQueues = useMemo(() => {
+    let result = queues;
+
+    // Type filter
+    if (typeFilter !== 'all') {
+      result = result.filter((q) => q.type === typeFilter);
+    }
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      result = result.filter((q) => q.name.toLowerCase().includes(query));
+    }
+
+    // Sort
+    return [...result].sort((a, b) => {
+      if (b.running !== a.running) return b.running - a.running;
+      if (b.queued !== a.queued) return b.queued - a.queued;
+      return a.name.localeCompare(b.name);
+    });
+  }, [queues, typeFilter, searchQuery]);
+
+  const customCount = queues.filter((q) => q.type === 'custom').length;
+  const taskCount = queues.filter((q) => q.type === 'task').length;
 
   // Summary stats — use runs API for accurate executing/waiting counts
   const totalExecuting = runCounts?.executing ?? queues.reduce((sum, q) => sum + q.running, 0);
@@ -201,16 +222,71 @@ export function QueueManagementPage() {
 
       {/* Tab Content */}
       {activeTab === 'queues' && (
-        <div>
-          {sortedQueues.length === 0 ? (
+        <div className="space-y-4">
+          {/* Filter Bar */}
+          <div className="flex items-center gap-3">
+            {/* Search */}
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search queues..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-8 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Type Filter Pills */}
+            <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+              {([
+                { value: 'all', label: 'All', count: queues.length },
+                { value: 'custom', label: 'Custom', count: customCount },
+                { value: 'task', label: 'Task', count: taskCount },
+              ] as const).map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setTypeFilter(opt.value)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    typeFilter === opt.value
+                      ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  {opt.label}
+                  <span className="ml-1 opacity-60">{opt.count}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Result count */}
+            {(searchQuery || typeFilter !== 'all') && (
+              <span className="text-xs text-gray-400 dark:text-gray-500">
+                {filteredQueues.length} of {queues.length}
+              </span>
+            )}
+          </div>
+
+          {/* Queue Cards */}
+          {filteredQueues.length === 0 ? (
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-8 text-center">
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                No queues found. Deploy trigger tasks with queue definitions first.
+                {queues.length === 0
+                  ? 'No queues found. Deploy trigger tasks with queue definitions first.'
+                  : 'No queues match your filter.'}
               </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {sortedQueues.map((queue) => (
+              {filteredQueues.map((queue) => (
                 <QueueStatusCard
                   key={queue.name}
                   queue={queue}

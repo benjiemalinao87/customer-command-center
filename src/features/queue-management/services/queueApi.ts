@@ -32,7 +32,7 @@ async function queueApiFetch<T>(path: string, options?: RequestInit): Promise<T>
 
 export interface QueueInfo {
   name: string;
-  type: 'custom' | 'default';
+  type: 'custom' | 'task';
   concurrencyLimit: number;
   concurrencyLimitOverride?: number | null;
   running: number;

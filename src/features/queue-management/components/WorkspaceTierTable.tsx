@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { ChevronDown, ChevronRight, Loader2, Check, AlertCircle, Workflow, Mail } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { ChevronDown, ChevronRight, ChevronLeft, Loader2, Check, AlertCircle, Workflow, Mail } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 
 type Tier = 'standard' | 'premium' | 'enterprise' | 'custom';
@@ -65,6 +65,9 @@ export function WorkspaceTierTable() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successId, setSuccessId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [showOnlyActive, setShowOnlyActive] = useState(true);
+  const PAGE_SIZE = 10;
 
   const fetchWorkspaces = useCallback(async () => {
     try {
@@ -301,6 +304,27 @@ export function WorkspaceTierTable() {
     return TIER_CONFIG[ws.tier]?.limit || 15;
   };
 
+  // Filter + paginate
+  const filteredWorkspaces = useMemo(() => {
+    if (showOnlyActive) {
+      return workspaces.filter(
+        (ws) => ws.stats.running > 0 || ws.stats.queued > 0 || ws.stats.completed24h > 0 || ws.stats.failed24h > 0
+      );
+    }
+    return workspaces;
+  }, [workspaces, showOnlyActive]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredWorkspaces.length / PAGE_SIZE));
+  const paginatedWorkspaces = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredWorkspaces.slice(start, start + PAGE_SIZE);
+  }, [filteredWorkspaces, currentPage]);
+
+  // Reset page when filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [showOnlyActive]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -320,12 +344,27 @@ export function WorkspaceTierTable() {
             Standard: 200/ws &middot; Premium: 30/ws &middot; Enterprise: 50/ws &middot; Custom: up to 100/ws
           </p>
         </div>
-        <button
-          onClick={fetchWorkspaces}
-          className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Active only toggle */}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showOnlyActive}
+              onChange={(e) => setShowOnlyActive(e.target.checked)}
+              className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-blue-500 focus:ring-blue-500"
+            />
+            <span className="text-xs text-gray-500 dark:text-gray-400">Active only</span>
+          </label>
+          <span className="text-xs text-gray-400 dark:text-gray-500">
+            {filteredWorkspaces.length} of {workspaces.length}
+          </span>
+          <button
+            onClick={fetchWorkspaces}
+            className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -370,7 +409,7 @@ export function WorkspaceTierTable() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
-            {workspaces.map((ws) => (
+            {paginatedWorkspaces.map((ws) => (
               <WorkspaceRow
                 key={ws.workspace_id}
                 ws={ws}
@@ -380,15 +419,53 @@ export function WorkspaceTierTable() {
                 onTierChange={handleTierChange}
               />
             ))}
-            {workspaces.length === 0 && (
+            {paginatedWorkspaces.length === 0 && (
               <tr>
                 <td colSpan={10} className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
-                  No workspaces found
+                  {workspaces.length === 0 ? 'No workspaces found' : 'No workspaces match the current filter'}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-700">
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredWorkspaces.length)} of {filteredWorkspaces.length}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`min-w-[2rem] px-2 py-1 text-xs font-medium rounded-md transition-colors ${
+                    page === currentPage
+                      ? 'bg-blue-500 text-white'
+                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1.5 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
