@@ -572,6 +572,8 @@ export function RunDebugger() {
                           </div>
                         </div>
                       )}
+
+                      {/* TODO: Span Properties from Trace API — re-enable once Trigger.dev /trace endpoint returns data.properties */}
                     </div>
                   )}
                 </div>

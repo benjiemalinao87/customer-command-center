@@ -3,6 +3,8 @@ import type {
   TriggerRunEvent,
   EventTreeNode,
   RunSummary,
+  TraceResponse,
+  TraceSpan,
 } from '../types/triggerRun';
 
 const TRIGGER_API_BASE = 'https://api.trigger.dev/api/v1';
@@ -37,6 +39,44 @@ export async function fetchRunEvents(runId: string): Promise<TriggerRunEventsRes
   }
 
   return response.json();
+}
+
+export async function fetchRunTrace(runId: string): Promise<TraceResponse> {
+  const url = `${TRIGGER_API_BASE}/runs/${encodeURIComponent(runId)}/trace`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${getApiKey()}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`Trace API error (${response.status}): ${body || response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export function buildTracePropertiesMap(
+  rootSpan: TraceSpan
+): Map<string, Record<string, unknown>> {
+  const map = new Map<string, Record<string, unknown>>();
+
+  const walk = (span: TraceSpan) => {
+    if (span.data?.properties && Object.keys(span.data.properties).length > 0) {
+      map.set(span.id, span.data.properties);
+    }
+    if (span.children) {
+      for (const child of span.children) {
+        walk(child);
+      }
+    }
+  };
+
+  walk(rootSpan);
+  return map;
 }
 
 // --- Timestamp & duration helpers ---
