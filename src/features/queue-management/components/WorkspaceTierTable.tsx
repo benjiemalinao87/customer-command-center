@@ -81,9 +81,9 @@ export function WorkspaceTierTable() {
         supabase.from('flow_executions').select('workspace_id').eq('status', 'completed').gte('updated_at', twentyFourHoursAgo),
         supabase.from('flow_executions').select('workspace_id').eq('status', 'failed').gte('updated_at', twentyFourHoursAgo),
         supabase.from('flow_sequence_executions').select('workspace_id, sequence_id').eq('status', 'running'),
-        // Execution IDs currently on a delay step (node_type='delay', status='running')
-        // These are NOT consuming Trigger.dev slots — they're suspended waiting on a timer
-        supabase.from('flow_execution_steps').select('execution_id').eq('node_type', 'delay').eq('status', 'running'),
+        // Execution IDs with a non-delay step actively running (consuming Trigger.dev slots)
+        // Everything else with flow_executions.status='running' is waiting (delay, suspended between steps, etc.)
+        supabase.from('flow_execution_steps').select('execution_id').eq('status', 'running').neq('node_type', 'delay'),
       ]);
 
       if (wsResult.error) throw wsResult.error;
@@ -198,21 +198,21 @@ export function WorkspaceTierTable() {
       // Also count sequence running per workspace
       const seqRunningCounts = countByWorkspace(seqRunningResult.data);
 
-      // Build set of execution_ids currently on a delay step (not consuming Trigger.dev slots)
-      const delayExecutionIds = new Set<string>();
+      // Build set of execution_ids actively executing a non-delay step (consuming Trigger.dev slots)
+      const activeExecutionIds = new Set<string>();
       if (delayStepsResult.data) {
         for (const row of delayStepsResult.data) {
-          if (row.execution_id) delayExecutionIds.add(row.execution_id);
+          if (row.execution_id) activeExecutionIds.add(row.execution_id);
         }
       }
 
-      // Cross-reference: count in-delay executions per workspace
-      // runningResult now includes `id`, so we can match against delayExecutionIds
-      const inDelayByWorkspace = new Map<string, number>();
-      if (runningResult.data && delayExecutionIds.size > 0) {
+      // Cross-reference: count actively-executing executions per workspace
+      // Everything else with status='running' is waiting (on delay, suspended between steps, etc.)
+      const activeByWorkspace = new Map<string, number>();
+      if (runningResult.data && activeExecutionIds.size > 0) {
         for (const row of runningResult.data) {
-          if (row.id && delayExecutionIds.has(row.id)) {
-            inDelayByWorkspace.set(row.workspace_id, (inDelayByWorkspace.get(row.workspace_id) || 0) + 1);
+          if (row.id && activeExecutionIds.has(row.id)) {
+            activeByWorkspace.set(row.workspace_id, (activeByWorkspace.get(row.workspace_id) || 0) + 1);
           }
         }
       }
@@ -222,7 +222,7 @@ export function WorkspaceTierTable() {
         const flowRunning = runningCounts.get(ws.id) || 0;
         const seqRunning = seqRunningCounts.get(ws.id) || 0;
         const totalRunning = flowRunning + seqRunning;
-        const inDelay = inDelayByWorkspace.get(ws.id) || 0;
+        const active = activeByWorkspace.get(ws.id) || 0;
         return {
           workspace_id: ws.id,
           workspace_name: ws.name || ws.id,
@@ -230,8 +230,8 @@ export function WorkspaceTierTable() {
           customLimit: tierInfo?.customLimit || null,
           stats: {
             running: totalRunning,
-            active: Math.max(0, totalRunning - inDelay),
-            inDelay,
+            active,
+            inDelay: Math.max(0, totalRunning - active),
             queued: queuedCounts.get(ws.id) || 0,
             completed24h: completedCounts.get(ws.id) || 0,
             failed24h: failedCounts.get(ws.id) || 0,
@@ -353,7 +353,7 @@ export function WorkspaceTierTable() {
                 <span title="Actively executing right now (consuming Trigger.dev slots)">Active</span>
               </th>
               <th className="text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-4 py-3">
-                <span title="Waiting on a delay/timer step (not consuming slots)">In Delay</span>
+                <span title="Waiting on delay/timer or suspended between steps (not consuming slots)">Waiting</span>
               </th>
               <th className="text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-4 py-3">
                 <span title="Waiting to execute (pending + queued)">Queued</span>
@@ -530,7 +530,7 @@ function WorkspaceRow({
           </span>
         </td>
 
-        {/* In Delay — waiting on timer, not consuming slots */}
+        {/* Waiting — on delay/timer or suspended between steps, not consuming slots */}
         <td className="px-4 py-3 text-center">
           <span
             className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 text-xs font-semibold rounded-full ${
