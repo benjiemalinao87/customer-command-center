@@ -4,8 +4,9 @@
  * Provides filtering by message type, direction, and workspace
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Filter, Mail, MessageSquare, AlertTriangle, Clock, RefreshCw, Phone, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { supabase } from '../../../lib/supabase';
 
 interface MessageErrorLog {
@@ -39,6 +40,7 @@ export function MessageErrorLogs() {
   const [searchTerm, setSearchTerm] = useState('');
   const [limit, setLimit] = useState(50);
   const [stats, setStats] = useState<ErrorStats>({ total: 0, byType: {}, byDirection: {} });
+  const [workspaceNames, setWorkspaceNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadLogs();
@@ -47,7 +49,7 @@ export function MessageErrorLogs() {
   const loadLogs = async () => {
     try {
       setLoading(true);
-      
+
       let query = supabase
         .from('message_error_logs')
         .select('*')
@@ -71,20 +73,36 @@ export function MessageErrorLogs() {
       }
 
       setLogs(data || []);
-      
-      // Calculate stats
+
+      // Fetch workspace names for all unique workspace IDs
       const allLogs = data || [];
+      const uniqueIds = [...new Set(allLogs.map(l => l.workspace_id).filter(Boolean))];
+      if (uniqueIds.length > 0) {
+        const { data: workspaces } = await supabase
+          .from('workspaces')
+          .select('id, name')
+          .in('id', uniqueIds);
+        if (workspaces) {
+          const nameMap: Record<string, string> = {};
+          workspaces.forEach((ws: { id: string; name: string }) => {
+            nameMap[String(ws.id)] = ws.name;
+          });
+          setWorkspaceNames(nameMap);
+        }
+      }
+
+      // Calculate stats
       const newStats: ErrorStats = {
         total: allLogs.length,
         byType: {},
         byDirection: {}
       };
-      
+
       allLogs.forEach(log => {
         newStats.byType[log.message_type] = (newStats.byType[log.message_type] || 0) + 1;
         newStats.byDirection[log.direction] = (newStats.byDirection[log.direction] || 0) + 1;
       });
-      
+
       setStats(newStats);
     } catch (error) {
       console.error('Error loading message error logs:', error);
@@ -154,6 +172,7 @@ export function MessageErrorLogs() {
       log.error_code?.toLowerCase().includes(searchLower) ||
       log.recipient?.toLowerCase().includes(searchLower) ||
       log.sender?.toLowerCase().includes(searchLower) ||
+      workspaceNames[log.workspace_id]?.toLowerCase().includes(searchLower) ||
       log.workspace_id?.toLowerCase().includes(searchLower) ||
       log.twilio_sid?.toLowerCase().includes(searchLower)
     );
@@ -247,6 +266,40 @@ export function MessageErrorLogs() {
           </div>
         </div>
       </div>
+
+      {/* Error Rate by Workspace Chart */}
+      {logs.length > 0 && (() => {
+        const counts: Record<string, number> = {};
+        logs.forEach(log => {
+          const name = workspaceNames[log.workspace_id] || log.workspace_id || 'Unknown';
+          counts[name] = (counts[name] || 0) + 1;
+        });
+        const chartData = Object.entries(counts)
+          .map(([name, count]) => ({ name, errors: count }))
+          .sort((a, b) => b.errors - a.errors);
+        const barColors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
+        return (
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+            <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-3">Errors by Workspace</h3>
+            <ResponsiveContainer width="100%" height={Math.max(120, chartData.length * 28)}>
+              <BarChart data={chartData} layout="vertical" margin={{ left: 0, right: 16, top: 0, bottom: 0 }}>
+                <XAxis type="number" allowDecimals={false} tick={{ fill: '#9ca3af', fontSize: 11 }} />
+                <YAxis type="category" dataKey="name" width={160} tick={{ fill: '#d1d5db', fontSize: 11 }} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }}
+                  labelStyle={{ color: '#d1d5db' }}
+                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                />
+                <Bar dataKey="errors" radius={[0, 4, 4, 0]} maxBarSize={20}>
+                  {chartData.map((_, index) => (
+                    <Cell key={index} fill={barColors[index % barColors.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        );
+      })()}
 
       {/* Filters and Controls */}
       <div className="flex flex-wrap items-center gap-4">
@@ -397,8 +450,8 @@ export function MessageErrorLogs() {
                     </td>
 
                     <td className="px-6 py-4">
-                      <span className="text-sm font-mono text-gray-600 dark:text-gray-400">
-                        {log.workspace_id || 'N/A'}
+                      <span className="text-sm text-gray-600 dark:text-gray-400" title={`ID: ${log.workspace_id}`}>
+                        {workspaceNames[log.workspace_id] || log.workspace_id || 'N/A'}
                       </span>
                     </td>
                   </tr>

@@ -32,6 +32,7 @@ import { isUserAllowed } from './lib/allowedUsers';
 import { connectionAnalytics } from './services/connectionAnalytics';
 import { tokenRefreshTracker } from './services/tokenRefreshTracker';
 import { userSessionActivityTracker } from './services/userSessionActivityTracker';
+import { auditLogger } from './services/auditLogger';
 
 type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'message-error-logs' | 'system-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'template-management' | 'schedule-trigger-runs' | 'staff-management' | 'frontend-infrastructure' | 'feature-rollouts' | 'mcp-permissions' | 'run-debugger' | 'queue-management';
 
@@ -82,9 +83,14 @@ function App() {
           currentPath: getSessionViewPath(currentView),
           authEvent: event,
         });
+        auditLogger.initialize(session.user.id, session.user.email || null);
+        if (event === 'SIGNED_IN') {
+          void auditLogger.logLogin();
+        }
         console.log('[Analytics] Initialized for user:', session.user.id);
       } else if (event === 'SIGNED_OUT') {
         void userSessionActivityTracker.handleSignedOut(event);
+        auditLogger.reset();
       } else {
         userSessionActivityTracker.reset();
       }
@@ -112,6 +118,7 @@ function App() {
     }
 
     userSessionActivityTracker.updateView(currentView, getSessionViewPath(currentView));
+    void auditLogger.logPageView(currentView);
   }, [currentView, isAuthenticated]);
 
   const checkAuth = async () => {
@@ -137,10 +144,12 @@ function App() {
           currentPath: getSessionViewPath(currentView),
           authEvent: 'INITIAL_SESSION',
         });
+        auditLogger.initialize(user.id, email);
         console.log('[Analytics] Initialized for user:', user.id);
       } else {
         setIsAllowed(null);
         userSessionActivityTracker.reset();
+        auditLogger.reset();
       }
     } catch (error) {
       console.error('Auth check failed:', error);
@@ -156,9 +165,11 @@ function App() {
 
   const handleLogout = async () => {
     try {
+      await auditLogger.logLogout();
       await userSessionActivityTracker.markOffline('signed_out');
       await supabase.auth.signOut();
       userSessionActivityTracker.reset();
+      auditLogger.reset();
       setIsAuthenticated(false);
       setIsAllowed(null);
       setUserEmail(null);

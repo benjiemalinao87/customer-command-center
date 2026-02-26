@@ -4,6 +4,7 @@ import { getStaffMembers, getAllWorkspaces, addStaffMember, removeStaffMember, a
 import { AddStaffModal } from './AddStaffModal';
 import { AssignWorkspaceModal } from './AssignWorkspaceModal';
 import type { StaffMember, WorkspaceOption } from '../types/staff';
+import { auditLogger } from '../../../services/auditLogger';
 
 export function StaffManagement() {
   const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -46,13 +47,16 @@ export function StaffManagement() {
 
   const handleAddStaff = async (email: string, fullName?: string, notes?: string) => {
     await addStaffMember(email, fullName, notes);
+    void auditLogger.logAction('staff-management', `Added staff member: ${fullName || email}`, { email, fullName });
     await loadData();
   };
 
   const handleRemoveFromRoster = async () => {
     if (!confirmAction || confirmAction.type !== 'remove-roster') return;
     try {
-      await removeStaffMember(confirmAction.staffMember.id);
+      const { staffMember } = confirmAction;
+      await removeStaffMember(staffMember.id);
+      void auditLogger.logAction('staff-management', `Removed staff member: ${staffMember.full_name || staffMember.email}`, { email: staffMember.email });
       setConfirmAction(null);
       await loadData();
     } catch (error: any) {
@@ -64,6 +68,8 @@ export function StaffManagement() {
   const handleAssignToWorkspace = async (workspaceId: string) => {
     if (!assignTarget) throw new Error('No staff member selected');
     const result = await assignToWorkspace(assignTarget.email, workspaceId, assignTarget.id);
+    const wsName = workspaces.find(w => w.id === workspaceId)?.name || workspaceId;
+    void auditLogger.logAction('staff-management', `Assigned ${assignTarget.full_name || assignTarget.email} to workspace: ${wsName}`, { email: assignTarget.email, workspaceId, workspaceName: wsName });
     await loadData();
     return result;
   };
@@ -73,7 +79,9 @@ export function StaffManagement() {
     const userId = confirmAction.staffMember.user_id;
     if (!userId) return;
     try {
-      await unassignFromWorkspace(userId, confirmAction.workspaceId);
+      const { staffMember, workspaceId, workspaceName } = confirmAction;
+      await unassignFromWorkspace(userId, workspaceId!);
+      void auditLogger.logAction('staff-management', `Unassigned ${staffMember.full_name || staffMember.email} from workspace: ${workspaceName || workspaceId}`, { email: staffMember.email, workspaceId, workspaceName });
       setConfirmAction(null);
       await loadData();
     } catch (error: any) {
