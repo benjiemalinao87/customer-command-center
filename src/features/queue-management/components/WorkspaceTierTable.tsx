@@ -43,6 +43,8 @@ interface ActiveItem {
 
 interface WorkspaceStats {
   running: number;
+  active: number;
+  inDelay: number;
   queued: number;
   completed24h: number;
   failed24h: number;
@@ -68,17 +70,20 @@ export function WorkspaceTierTable() {
     try {
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-      // Parallel fetch: workspaces, tiers, running flows (with flow_id), queued, completed, failed, running sequences
+      // Parallel fetch: workspaces, tiers, running flows (with flow_id), queued, completed, failed, running sequences, delay steps
       // Note: Running queries have NO time filter — multi-day campaigns legitimately stay in 'running' status
       // while waiting between delay steps (wait.for, wait.until)
-      const [wsResult, tierResult, runningResult, queuedResult, completedResult, failedResult, seqRunningResult] = await Promise.all([
+      const [wsResult, tierResult, runningResult, queuedResult, completedResult, failedResult, seqRunningResult, delayStepsResult] = await Promise.all([
         supabase.from('workspaces').select('id, name').order('name'),
         supabase.from('workspace_settings').select('workspace_id, settings_value').eq('settings_key', 'QUEUE_TIER'),
-        supabase.from('flow_executions').select('workspace_id, flow_id').eq('status', 'running'),
+        supabase.from('flow_executions').select('id, workspace_id, flow_id').eq('status', 'running'),
         supabase.from('flow_executions').select('workspace_id').in('status', ['pending', 'queued']),
         supabase.from('flow_executions').select('workspace_id').eq('status', 'completed').gte('updated_at', twentyFourHoursAgo),
         supabase.from('flow_executions').select('workspace_id').eq('status', 'failed').gte('updated_at', twentyFourHoursAgo),
         supabase.from('flow_sequence_executions').select('workspace_id, sequence_id').eq('status', 'running'),
+        // Execution IDs currently on a delay step (node_type='delay', status='running')
+        // These are NOT consuming Trigger.dev slots — they're suspended waiting on a timer
+        supabase.from('flow_execution_steps').select('execution_id').eq('node_type', 'delay').eq('status', 'running'),
       ]);
 
       if (wsResult.error) throw wsResult.error;
@@ -193,17 +198,40 @@ export function WorkspaceTierTable() {
       // Also count sequence running per workspace
       const seqRunningCounts = countByWorkspace(seqRunningResult.data);
 
+      // Build set of execution_ids currently on a delay step (not consuming Trigger.dev slots)
+      const delayExecutionIds = new Set<string>();
+      if (delayStepsResult.data) {
+        for (const row of delayStepsResult.data) {
+          if (row.execution_id) delayExecutionIds.add(row.execution_id);
+        }
+      }
+
+      // Cross-reference: count in-delay executions per workspace
+      // runningResult now includes `id`, so we can match against delayExecutionIds
+      const inDelayByWorkspace = new Map<string, number>();
+      if (runningResult.data && delayExecutionIds.size > 0) {
+        for (const row of runningResult.data) {
+          if (row.id && delayExecutionIds.has(row.id)) {
+            inDelayByWorkspace.set(row.workspace_id, (inDelayByWorkspace.get(row.workspace_id) || 0) + 1);
+          }
+        }
+      }
+
       const rows: WorkspaceRowData[] = wsResult.data.map((ws) => {
         const tierInfo = tierMap.get(ws.id);
         const flowRunning = runningCounts.get(ws.id) || 0;
         const seqRunning = seqRunningCounts.get(ws.id) || 0;
+        const totalRunning = flowRunning + seqRunning;
+        const inDelay = inDelayByWorkspace.get(ws.id) || 0;
         return {
           workspace_id: ws.id,
           workspace_name: ws.name || ws.id,
           tier: tierInfo?.tier || 'standard',
           customLimit: tierInfo?.customLimit || null,
           stats: {
-            running: flowRunning + seqRunning,
+            running: totalRunning,
+            active: Math.max(0, totalRunning - inDelay),
+            inDelay,
             queued: queuedCounts.get(ws.id) || 0,
             completed24h: completedCounts.get(ws.id) || 0,
             failed24h: failedCounts.get(ws.id) || 0,
@@ -322,7 +350,10 @@ export function WorkspaceTierTable() {
                 Limit
               </th>
               <th className="text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-4 py-3">
-                <span title="Currently executing (flows + sequences)">Running</span>
+                <span title="Actively executing right now (consuming Trigger.dev slots)">Active</span>
+              </th>
+              <th className="text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-4 py-3">
+                <span title="Waiting on a delay/timer step (not consuming slots)">In Delay</span>
               </th>
               <th className="text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-4 py-3">
                 <span title="Waiting to execute (pending + queued)">Queued</span>
@@ -351,7 +382,7 @@ export function WorkspaceTierTable() {
             ))}
             {workspaces.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                <td colSpan={10} className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                   No workspaces found
                 </td>
               </tr>
@@ -381,7 +412,8 @@ function WorkspaceRow({
   const [customValue, setCustomValue] = useState(ws.customLimit?.toString() || '');
 
   const tierConfig = TIER_CONFIG[ws.tier] || TIER_CONFIG.standard;
-  const usagePercent = effectiveLimit > 0 ? Math.round((ws.stats.running / effectiveLimit) * 100) : 0;
+  // Usage % based on Active count (what actually consumes Trigger.dev concurrent slots)
+  const usagePercent = effectiveLimit > 0 ? Math.round((ws.stats.active / effectiveLimit) * 100) : 0;
   const hasActiveItems = ws.stats.activeItems.length > 0;
 
   const handleSelectChange = (value: string) => {
@@ -485,16 +517,29 @@ function WorkspaceRow({
           </span>
         </td>
 
-        {/* Running */}
+        {/* Active — consuming Trigger.dev slots */}
         <td className="px-4 py-3 text-center">
           <span
             className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 text-xs font-semibold rounded-full ${
-              ws.stats.running > 0
+              ws.stats.active > 0
                 ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
                 : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
             }`}
           >
-            {ws.stats.running}
+            {ws.stats.active}
+          </span>
+        </td>
+
+        {/* In Delay — waiting on timer, not consuming slots */}
+        <td className="px-4 py-3 text-center">
+          <span
+            className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 text-xs font-semibold rounded-full ${
+              ws.stats.inDelay > 0
+                ? 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+            }`}
+          >
+            {ws.stats.inDelay}
           </span>
         </td>
 
@@ -564,7 +609,7 @@ function WorkspaceRow({
       {/* Expanded detail: active flows & sequences */}
       {expanded && hasActiveItems && (
         <tr>
-          <td colSpan={9} className="bg-gray-50/50 dark:bg-gray-900/30 px-4 py-3">
+          <td colSpan={10} className="bg-gray-50/50 dark:bg-gray-900/30 px-4 py-3">
             <div className="pl-8">
               <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
                 Active Flows & Sequences

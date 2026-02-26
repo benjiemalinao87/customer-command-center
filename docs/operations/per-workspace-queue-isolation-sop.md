@@ -24,19 +24,19 @@
 
 ### What Is Per-Workspace Queue Isolation?
 
-A concurrency control system that prevents any single workspace from monopolizing shared workflow execution resources. Each workspace gets its own isolated sub-queue with a capped concurrency limit, determined by its assigned tier (standard or premium).
+A concurrency control system that prevents any single workspace from monopolizing shared workflow execution resources. Each workspace gets its own isolated sub-queue with a capped concurrency limit, determined by its assigned tier (standard, premium, enterprise, or custom).
 
 ### Key Benefits
 
 - **Zero cross-workspace interference** — one workspace's 5,000-contact broadcast cannot block another workspace's single workflow
-- **Tiered resource allocation** — standard workspaces get 15 concurrent slots, premium get 30
+- **Tiered resource allocation** — standard workspaces get 200 concurrent slots, premium 30, enterprise 50, custom up to 100
 - **No code changes to task definitions** — isolation is applied at trigger time via `concurrencyKey`
 - **Full backward compatibility** — existing task definitions and queue references still work
 - **Centralized control** — manage tiers and override limits from the Command Center dashboard
 
 ### System Components
 
-1. **Tiered Queue Definitions** — `trigger/queues.js` (workflow-standard, workflow-premium)
+1. **Tiered Queue Definitions** — `trigger/queues.js` (workflow-standard, workflow-premium, workflow-enterprise, workflow-custom)
 2. **Queue Routing Helper** — `trigger/utils/workspaceQueueHelper.js`
 3. **concurrencyKey on All Trigger Calls** — 50+ call sites across backend + trigger tasks
 4. **Command Center Dashboard** — Queue status cards, workspace tier table, override controls
@@ -91,22 +91,22 @@ A concurrency control system that prevents any single workspace from monopolizin
 ┌───────────────────────────────────────────────────────────────────────┐
 │                         AFTER (Tiered Per-Workspace)                  │
 │                                                                       │
-│  ┌─────────────────────────────┐  ┌─────────────────────────────┐   │
-│  │  workflow-standard (15/ws)  │  │  workflow-premium (30/ws)   │   │
-│  │                             │  │                             │   │
-│  │  ws:45963  ████████████████ │  │  ws:99999  ████████████░░░ │   │
-│  │            15/15 (at cap)   │  │            12/30            │   │
-│  │                             │  │                             │   │
-│  │  ws:12345  ████░░░░░░░░░░░ │  │                             │   │
-│  │            4/15 (running!)  │  │                             │   │
-│  │                             │  │                             │   │
-│  │  ws:67890  ██░░░░░░░░░░░░░ │  │                             │   │
-│  │            2/15 (running!)  │  │                             │   │
-│  └─────────────────────────────┘  └─────────────────────────────┘   │
+│  ┌──────────────────────────────┐  ┌─────────────────────────────┐  │
+│  │  workflow-standard (200/ws) │  │  workflow-premium (30/ws)   │  │
+│  │                              │  │                             │  │
+│  │  ws:45963  ████████████████ │  │  ws:99999  ████████████░░░ │  │
+│  │            120/200           │  │            12/30            │  │
+│  │                              │  │                             │  │
+│  │  ws:12345  ████░░░░░░░░░░░ │  └─────────────────────────────┘  │
+│  │            4/200             │                                   │
+│  │                              │  ┌─────────────────────────────┐  │
+│  │  ws:67890  ██░░░░░░░░░░░░░ │  │  workflow-enterprise (50)   │  │
+│  │            2/200             │  │  workflow-custom (up to 100)│  │
+│  └──────────────────────────────┘  └─────────────────────────────┘  │
 │                                                                       │
 │  Each workspace isolated by concurrencyKey.                          │
 │  ws:45963 at cap does NOT block ws:12345 or ws:67890.               │
-│  Environment total cap: 400 across ALL queues.                       │
+│  Environment total cap: 600 across ALL queues (burst 1200).          │
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -129,7 +129,7 @@ A concurrency control system that prevents any single workspace from monopolizin
 │  1. Receives trigger request with concurrencyKey                    │
 │  2. Looks up queue by task definition (workflow-standard)            │
 │  3. Creates sub-queue: "workflow-standard:ws:45963"                 │
-│  4. Checks sub-queue concurrency: running < 15?                     │
+│  4. Checks sub-queue concurrency: running < limit?                   │
 │     ├── YES → Execute immediately                                   │
 │     └── NO  → Queue the run (waits for slot)                       │
 │  5. Run completes → slot freed → next queued run starts             │
@@ -188,11 +188,13 @@ A concurrency control system that prevents any single workspace from monopolizin
 ┌────────────────────────────────────────────────────────────────┐
 │                    Queue Allocation Map                          │
 │                                                                  │
-│  Environment Limit: 400 concurrent (burst 800)                  │
+│  Environment Limit: 600 concurrent (burst 1200)                 │
 │                                                                  │
 │  WORKFLOW QUEUES (tiered, per-workspace isolation)               │
-│  ├── workflow-standard    15/ws   Default tier                  │
-│  └── workflow-premium     30/ws   High-volume tier              │
+│  ├── workflow-standard   200/ws   Default tier (migration safe) │
+│  ├── workflow-premium     30/ws   High-volume tier              │
+│  ├── workflow-enterprise  50/ws   Power workspaces              │
+│  └── workflow-custom     100/ws   Custom override tier          │
 │                                                                  │
 │  OPERATIONAL QUEUES (shared, no per-workspace isolation)        │
 │  ├── sms-operations       40      Twilio rate-limited           │
@@ -207,33 +209,39 @@ A concurrency control system that prevents any single workspace from monopolizin
 │  ├── trigger-events       10      Field change monitoring       │
 │  └── missed-call-trig.    10      Missed call triggers          │
 │                                                                  │
-│  Total allocated: ~325 (within 400 base limit)                  │
+│  Total allocated: ~525 (within 600 base limit)                  │
 └────────────────────────────────────────────────────────────────┘
 ```
 
 ### Tier Comparison
 
 ```
-┌─────────────────┬───────────────┬───────────────┐
-│                 │   STANDARD    │   PREMIUM     │
-├─────────────────┼───────────────┼───────────────┤
-│ Queue Name      │ workflow-     │ workflow-     │
-│                 │ standard      │ premium       │
-├─────────────────┼───────────────┼───────────────┤
-│ Per-WS Limit    │     15        │     30        │
-├─────────────────┼───────────────┼───────────────┤
-│ Use Case        │ Most          │ High-volume   │
-│                 │ workspaces    │ broadcasters  │
-├─────────────────┼───────────────┼───────────────┤
-│ Default?        │ YES           │ NO            │
-├─────────────────┼───────────────┼───────────────┤
-│ DB Setting      │ (none needed) │ QUEUE_TIER:   │
-│                 │               │ {"tier":      │
-│                 │               │  "premium"}   │
-├─────────────────┼───────────────┼───────────────┤
-│ 5K broadcast    │ 15 at a time  │ 30 at a time  │
-│ duration        │ ~333 batches  │ ~167 batches  │
-└─────────────────┴───────────────┴───────────────┘
+┌─────────────────┬───────────────┬───────────────┬───────────────┬───────────────┐
+│                 │   STANDARD    │   PREMIUM     │  ENTERPRISE   │   CUSTOM      │
+├─────────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+│ Queue Name      │ workflow-     │ workflow-     │ workflow-     │ workflow-     │
+│                 │ standard      │ premium       │ enterprise    │ custom        │
+├─────────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+│ Per-WS Limit    │    200        │     30        │     50        │  up to 100    │
+├─────────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+│ Use Case        │ Default for   │ Future:       │ Future:       │ Per-workspace │
+│                 │ all workspaces│ high-volume   │ power users   │ custom limits │
+├─────────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+│ Default?        │ YES           │ NO            │ NO            │ NO            │
+├─────────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+│ DB Setting      │ (none needed) │ QUEUE_TIER:   │ QUEUE_TIER:   │ QUEUE_TIER:   │
+│                 │               │ {"tier":      │ {"tier":      │ {"tier":      │
+│                 │               │  "premium"}   │  "enterprise"}│  "custom",    │
+│                 │               │               │               │  "concurrency │
+│                 │               │               │               │   Limit": 75} │
+├─────────────────┼───────────────┼───────────────┼───────────────┼───────────────┤
+│ 5K broadcast    │ 200 at a time │ 30 at a time  │ 50 at a time  │ up to 100/t   │
+│ throughput      │ ~25 batches   │ ~167 batches  │ ~100 batches  │ varies        │
+└─────────────────┴───────────────┴───────────────┴───────────────┴───────────────┘
+
+Note: Standard tier set to 200 for safe migration from the old workflow-execution
+queue (which was overridden to 600). Tune down via Trigger.dev dashboard after
+per-workspace isolation is verified stable.
 ```
 
 ---
@@ -252,22 +260,22 @@ A concurrency control system that prevents any single workspace from monopolizin
             │   Trigger.dev Queue Engine   │
             │                             │
             │   Queue: workflow-standard  │
-            │   concurrencyLimit: 15      │
+            │   concurrencyLimit: 200     │
             │                             │
             │   Sub-queues by key:        │
             │   ┌─────────────────────┐   │
             │   │ key: "45963"        │   │
-            │   │ running: 15/15 FULL │   │
-            │   │ queued: 4,985       │   │
+            │   │ running: 200/200    │   │
+            │   │ queued: 4,800       │   │
             │   └─────────────────────┘   │
             │   ┌─────────────────────┐   │
             │   │ key: "12345"        │   │
-            │   │ running: 4/15       │   │
+            │   │ running: 4/200      │   │
             │   │ queued: 0           │   │
             │   └─────────────────────┘   │
             │   ┌─────────────────────┐   │
             │   │ key: "67890"        │   │
-            │   │ running: 2/15       │   │
+            │   │ running: 2/200      │   │
             │   │ queued: 0           │   │
             │   └─────────────────────┘   │
             │                             │
@@ -296,8 +304,8 @@ tasks.trigger("trigger-workflow", payload, {
   → 3rd argument: { concurrencyKey: "45963" }
   → Runs grouped by workspaceId
   → Each group has its own concurrency cap
-  → Workspace 45963 at 15/15 → its runs queue
-  → Workspace 12345 at 4/15 → runs immediately
+  → Workspace 45963 at 200/200 → its runs queue
+  → Workspace 12345 at 4/200 → runs immediately
 ```
 
 ---
@@ -670,7 +678,7 @@ DO UPDATE SET settings_value = EXCLUDED.settings_value;
 │  └───────────────────┘ └───────────────────┘ └──────────────────┘  │
 │                                                                      │
 │  Workspace Tier Assignments                                          │
-│  Standard: 15 concurrent workflows/ws · Premium: 30 concurrent/ws  │
+│  Standard: 200/ws · Premium: 30/ws · Enterprise: 50/ws · Custom: up to 100/ws │
 │  ┌──────────────┬──────────┬────────────┬────────┬────────┐        │
 │  │ Workspace    │ ID       │ Tier       │ Active │ Status │        │
 │  ├──────────────┼──────────┼────────────┼────────┼────────┤        │
@@ -734,7 +742,7 @@ DO UPDATE SET settings_value = EXCLUDED.settings_value;
   │  QUEUE a workspace │             │       │  for ALL workspaces│
   │  routes to         │             │       │  in that queue     │
   │                    │             │       │                    │
-  │  standard → 15/ws  │             │       │  Override: 25      │
+  │  standard → 200/ws  │            │       │  Override: 300     │
   │  premium → 30/ws   │             │       │  → ALL standard ws │
   │                    │             │       │  now get 25 slots  │
   │  Granularity:      │             │       │                    │
@@ -981,13 +989,13 @@ DO UPDATE SET settings_value = EXCLUDED.settings_value;
 │                                                                  │
 │  2. If a queue is at 100% and overloaded:                       │
 │     → Override concurrency limit higher (temporary)             │
-│     → e.g., Override workflow-standard from 15 → 25             │
+│     → e.g., Override workflow-standard from 200 → 400           │
 │                                                                  │
 │  3. If a specific workspace needs more:                          │
 │     → Upgrade to premium tier (30 slots)                        │
 │     → Takes effect in ≤5 minutes                                │
 │                                                                  │
-│  4. If environment total (400) is the bottleneck:                │
+│  4. If environment total (600) is the bottleneck:                │
 │     → This requires a Trigger.dev plan upgrade                  │
 │     → Or reducing concurrency on lower-priority queues          │
 │                                                                  │
@@ -1033,12 +1041,14 @@ DO UPDATE SET settings_value = EXCLUDED.settings_value;
 ┌──────────────────────────────────────────────────────────────────┐
 │                    Capacity Calculator                            │
 │                                                                  │
-│  Environment total limit:     400 concurrent runs               │
-│  Burst limit:                 800 concurrent runs               │
+│  Environment total limit:     600 concurrent runs               │
+│  Burst limit:                1200 concurrent runs               │
 │                                                                  │
 │  Queue Allocations:                                              │
-│  workflow-standard:            15/ws × N workspaces             │
+│  workflow-standard:           200/ws × N workspaces             │
 │  workflow-premium:             30/ws × N workspaces             │
+│  workflow-enterprise:          50/ws × N workspaces             │
+│  workflow-custom:             100/ws × N workspaces             │
 │  sms-operations:               40 (shared)                      │
 │  email-operations:             30 (shared)                      │
 │  database-ops:                 50 (shared)                      │
@@ -1052,21 +1062,19 @@ DO UPDATE SET settings_value = EXCLUDED.settings_value;
 │  missed-call-triggers:         10 (shared)                      │
 │                                                                  │
 │  Shared queue total:          310                               │
-│  Remaining for workflows:     400 - 310 = 90 concurrent        │
+│  Remaining for workflows:     600 - 310 = 290 concurrent       │
 │                                                                  │
-│  At standard tier (15/ws):                                      │
-│  Max SIMULTANEOUS ws at cap: 90 / 15 = 6 workspaces            │
-│                                                                  │
-│  At premium tier (30/ws):                                       │
-│  Max SIMULTANEOUS ws at cap: 90 / 30 = 3 workspaces            │
+│  At standard tier (200/ws):                                     │
+│  A single workspace can use up to 200 concurrent slots.        │
+│  Environment total (600 with addon) is the HARD ceiling.       │
 │                                                                  │
 │  NOTE: Per-workspace limits are SOFT limits. The environment    │
-│  total (400) is the HARD ceiling. If 6 standard workspaces     │
-│  are each running 15, that's 90 concurrent + 310 shared =      │
-│  400, hitting the environment limit.                            │
+│  total is the HARD ceiling. Standard is set to 200 for safe    │
+│  migration — tune down via Trigger.dev dashboard override      │
+│  after per-workspace isolation is verified stable.              │
 │                                                                  │
 │  In practice, most workspaces run 0-5 concurrent workflows.    │
-│  Only broadcast-heavy workspaces approach 15.                   │
+│  Only broadcast-heavy workspaces approach the limit.            │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1086,7 +1094,7 @@ DO UPDATE SET settings_value = EXCLUDED.settings_value;
   │ consistently high   │ queued    │ premium or │
   │                     │           │ override   │
   ├─────────────────────┼───────────┼────────────┤
-  │ Environment total   │ >350/400  │ Reduce     │
+  │ Environment total   │ >500/600  │ Reduce     │
   │ approaching limit   │           │ per-queue  │
   │                     │           │ limits or  │
   │                     │           │ upgrade    │
@@ -1326,7 +1334,7 @@ Instead of fixed 15/30 per workspace, automatically adjust based on real-time lo
 │  ELSE:                                          │
 │    effective_limit = base_limit * 0.8  (shed)   │
 │                                                  │
-│  Cap: never exceed environment max (400)        │
+│  Cap: never exceed environment max (600)        │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -1345,7 +1353,7 @@ Priority Levels:
 Queue Selection:
   ┌──────────────────┐
   │ P0: workflow-crit│  concurrencyLimit: 20 (reserved)
-  │ P1: workflow-std │  concurrencyLimit: 15 (per workspace)
+  │ P1: workflow-std │  concurrencyLimit: 200 (per workspace)
   │ P2: workflow-bulk│  concurrencyLimit: 5  (per workspace)
   └──────────────────┘
 ```
@@ -1419,9 +1427,9 @@ Contact timezone → Region mapping:
 Client-facing UI in workspace Settings to upgrade their queue tier (tied to billing):
 
 ```
-Current Plan: Growth (Standard Queue — 15 concurrent)
-[Upgrade to Pro] → Premium Queue — 30 concurrent
-                   $49/mo additional
+Current Plan: Growth (Standard Queue — 200 concurrent)
+[Upgrade to Enterprise] → Enterprise Queue — 50 concurrent
+                          $49/mo additional
 ```
 
 ### Priority Matrix
@@ -1468,7 +1476,7 @@ If any issue arises with the current queue isolation system, these overrides are
 | Increase workspace capacity | Override queue limit (UI button) | Raises concurrency for ALL workspaces in that tier | Yes — Reset button |
 | Give one workspace more capacity | Change tier to Premium (dropdown) | That workspace gets 30 instead of 15 slots | Yes — change back |
 | Pause a runaway workspace | Pause queue (UI button) | New runs queue but don't execute | Yes — Resume button |
-| Remove all limits | Override limit to 400 | Effectively removes per-workspace isolation | Yes — Reset button |
+| Remove all limits | Override limit to 600 | Effectively removes per-workspace isolation | Yes — Reset button |
 | Rollback entirely | Reset all overrides + delete QUEUE_TIER rows | Returns to pre-isolation behavior | Yes — re-apply tiers |
 
 All overrides take effect within seconds via Trigger.dev REST API. No git push, no deploy, no restart needed.
