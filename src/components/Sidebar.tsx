@@ -1,7 +1,7 @@
-import { BarChart3, Activity, UserCheck, BarChart2, Users, FileText, Database, Book, Webhook, TrendingUp, Code, Shield, LogOut, Moon, Sun, ChevronLeft, ChevronRight, AlertTriangle, ScrollText, FileEdit, Calendar, UsersRound, Server, Rocket, KeyRound, Bug, Layers, type LucideIcon } from 'lucide-react';
+import { BarChart3, Activity, UserCheck, BarChart2, Users, FileText, Database, Book, Webhook, TrendingUp, Code, Shield, LogOut, Moon, Sun, ChevronLeft, ChevronRight, AlertTriangle, ScrollText, FileEdit, Calendar, UsersRound, Server, Rocket, KeyRound, Bug, Layers, Building2, type LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
-type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'message-error-logs' | 'system-logs' | 'template-management' | 'schedule-trigger-runs' | 'staff-management' | 'frontend-infrastructure' | 'feature-rollouts' | 'mcp-permissions' | 'run-debugger' | 'queue-management';
+type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'message-error-logs' | 'system-logs' | 'template-management' | 'schedule-trigger-runs' | 'staff-management' | 'frontend-infrastructure' | 'feature-rollouts' | 'mcp-permissions' | 'run-debugger' | 'queue-management' | 'office-map';
 
 interface MenuSection {
   label: string;
@@ -18,7 +18,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ currentView, onViewChange, darkMode, onToggleDarkMode, onLogout, userEmail }: SidebarProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
 
   const menuSections: MenuSection[] = [
     {
@@ -26,6 +26,7 @@ export function Sidebar({ currentView, onViewChange, darkMode, onToggleDarkMode,
       items: [
         { id: 'dashboard', icon: BarChart3, label: 'Dashboard' },
         { id: 'connection-analytics', icon: TrendingUp, label: 'Analytics' },
+        { id: 'office-map', icon: Building2, label: 'Office Map' },
       ],
     },
     {

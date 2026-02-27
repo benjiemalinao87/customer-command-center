@@ -38,10 +38,45 @@ export function ActivityLogs() {
   const [filterAction, setFilterAction] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [limit, setLimit] = useState(50);
+  const [dateRange, setDateRange] = useState('all');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
 
   useEffect(() => {
     loadLogs();
-  }, [filterAction, limit]);
+  }, [filterAction, limit, dateRange, fromDate, toDate]);
+
+  const getDateBounds = (): { from: string | null; to: string | null } => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    switch (dateRange) {
+      case 'today':
+        return { from: startOfToday.toISOString(), to: null };
+      case 'yesterday': {
+        const startOfYesterday = new Date(startOfToday);
+        startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+        return { from: startOfYesterday.toISOString(), to: startOfToday.toISOString() };
+      }
+      case '7d': {
+        const d = new Date(startOfToday);
+        d.setDate(d.getDate() - 7);
+        return { from: d.toISOString(), to: null };
+      }
+      case '30d': {
+        const d = new Date(startOfToday);
+        d.setDate(d.getDate() - 30);
+        return { from: d.toISOString(), to: null };
+      }
+      case 'custom': {
+        const from = fromDate ? new Date(fromDate).toISOString() : null;
+        const to = toDate ? new Date(toDate + 'T23:59:59.999').toISOString() : null;
+        return { from, to };
+      }
+      default:
+        return { from: null, to: null };
+    }
+  };
 
   const loadLogs = async () => {
     try {
@@ -56,6 +91,10 @@ export function ActivityLogs() {
       if (filterAction) {
         query = query.eq('action', filterAction);
       }
+
+      const { from, to } = getDateBounds();
+      if (from) query = query.gte('created_at', from);
+      if (to) query = query.lte('created_at', to);
 
       const { data, error } = await query;
 
@@ -213,6 +252,37 @@ export function ActivityLogs() {
             <option key={t.value} value={t.value}>{t.label}</option>
           ))}
         </select>
+
+        <select
+          value={dateRange}
+          onChange={(e) => setDateRange(e.target.value)}
+          className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+        >
+          <option value="all">All Time</option>
+          <option value="today">Today</option>
+          <option value="yesterday">Yesterday</option>
+          <option value="7d">Last 7 Days</option>
+          <option value="30d">Last 30 Days</option>
+          <option value="custom">Custom Range</option>
+        </select>
+
+        {dateRange === 'custom' && (
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+            />
+            <span className="text-gray-400 text-sm">to</span>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+            />
+          </div>
+        )}
 
         <select
           value={limit}

@@ -22,6 +22,7 @@ import { McpPermissions } from './features/mcp-permissions';
 import { FrontendInfrastructure } from './features/frontend-infrastructure';
 import { RunDebugger } from './features/run-debugger';
 import { QueueManagementPage } from './features/queue-management';
+import { OfficeMapSampleV2 } from './features/office-map-sample-v2/components/OfficeMapSampleV2';
 import { Login } from './components/Login';
 import { AccessDenied } from './components/AccessDenied';
 import { Sidebar } from './components/Sidebar';
@@ -34,10 +35,14 @@ import { tokenRefreshTracker } from './services/tokenRefreshTracker';
 import { userSessionActivityTracker } from './services/userSessionActivityTracker';
 import { auditLogger } from './services/auditLogger';
 
-type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'message-error-logs' | 'system-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'template-management' | 'schedule-trigger-runs' | 'staff-management' | 'frontend-infrastructure' | 'feature-rollouts' | 'mcp-permissions' | 'run-debugger' | 'queue-management';
+type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-monitoring' | 'activity-logs' | 'message-error-logs' | 'system-logs' | 'cache-system' | 'documentation' | 'webhook-analytics' | 'connection-analytics' | 'admin' | 'developer-mode' | 'template-management' | 'schedule-trigger-runs' | 'staff-management' | 'frontend-infrastructure' | 'feature-rollouts' | 'mcp-permissions' | 'run-debugger' | 'queue-management' | 'office-map';
+const SIDEBAR_UNLOCKED_KEY = 'command_center_sidebar_unlocked';
 
 function App() {
-  const [currentView, setCurrentView] = useState<View>('dashboard');
+  const [currentView, setCurrentView] = useState<View>('office-map');
+  const [isSidebarVisible, setIsSidebarVisible] = useState(() => {
+    return sessionStorage.getItem(SIDEBAR_UNLOCKED_KEY) === '1';
+  });
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [isAllowed, setIsAllowed] = useState<boolean | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -54,6 +59,23 @@ function App() {
     to: new Date().toISOString()
   });
 
+  const hideSidebarForMapFocus = () => {
+    setIsSidebarVisible(false);
+    sessionStorage.removeItem(SIDEBAR_UNLOCKED_KEY);
+  };
+
+  const unlockSidebar = () => {
+    setIsSidebarVisible(true);
+    sessionStorage.setItem(SIDEBAR_UNLOCKED_KEY, '1');
+  };
+
+  const handleViewChange = (nextView: View) => {
+    setCurrentView(nextView);
+    if (nextView !== 'office-map') {
+      unlockSidebar();
+    }
+  };
+
   useEffect(() => {
     checkAuth();
 
@@ -62,7 +84,7 @@ function App() {
       setIsAuthenticated(!!session);
       const email = session?.user?.email || null;
       setUserEmail(email);
-      
+
       // Check if user is in the allowed list (only if authenticated)
       if (session) {
         setIsAllowed(isUserAllowed(email));
@@ -72,6 +94,11 @@ function App() {
 
       // Initialize analytics services with user context
       if (session?.user) {
+        if (event === 'SIGNED_IN') {
+          setCurrentView('office-map');
+          hideSidebarForMapFocus();
+        }
+
         connectionAnalytics.initialize(null, session.user.id);
         tokenRefreshTracker.initialize(session.user.id);
         userSessionActivityTracker.initialize({
@@ -91,6 +118,7 @@ function App() {
       } else if (event === 'SIGNED_OUT') {
         void userSessionActivityTracker.handleSignedOut(event);
         auditLogger.reset();
+        hideSidebarForMapFocus();
       } else {
         userSessionActivityTracker.reset();
       }
@@ -128,7 +156,7 @@ function App() {
       setIsAuthenticated(!!user);
       const email = user?.email || null;
       setUserEmail(email);
-      
+
       // Check if user is in the allowed list (only if authenticated)
       if (user) {
         setIsAllowed(isUserAllowed(email));
@@ -150,6 +178,7 @@ function App() {
         setIsAllowed(null);
         userSessionActivityTracker.reset();
         auditLogger.reset();
+        hideSidebarForMapFocus();
       }
     } catch (error) {
       console.error('Auth check failed:', error);
@@ -160,6 +189,8 @@ function App() {
   };
 
   const handleLoginSuccess = () => {
+    setCurrentView('office-map');
+    hideSidebarForMapFocus();
     checkAuth();
   };
 
@@ -173,6 +204,7 @@ function App() {
       setIsAuthenticated(false);
       setIsAllowed(null);
       setUserEmail(null);
+      hideSidebarForMapFocus();
     } catch (error) {
       console.error('Logout failed:', error);
     }
@@ -181,6 +213,11 @@ function App() {
   const toggleDarkMode = () => {
     setDarkMode(prev => !prev);
   };
+
+  const isOfficeMapView = currentView === 'office-map';
+  const contentContainerClass = isOfficeMapView
+    ? 'w-full max-w-none px-0 py-0'
+    : `${settings.wideLayout ? 'max-w-none' : 'max-w-7xl'} mx-auto px-4 sm:px-6 lg:px-8 py-8`;
 
   // Show loading state while checking auth or access
   if (isAuthenticated === null || (isAuthenticated && isAllowed === null)) {
@@ -207,19 +244,21 @@ function App() {
   return (
     <div className="h-screen flex bg-gray-50 dark:bg-gray-900 overflow-hidden">
       {/* Left Sidebar */}
-      <Sidebar
-        currentView={currentView}
-        onViewChange={setCurrentView}
-        darkMode={darkMode}
-        onToggleDarkMode={toggleDarkMode}
-        onLogout={handleLogout}
-        userEmail={userEmail}
-      />
+      {isSidebarVisible && (
+        <Sidebar
+          currentView={currentView}
+          onViewChange={handleViewChange}
+          darkMode={darkMode}
+          onToggleDarkMode={toggleDarkMode}
+          onLogout={handleLogout}
+          userEmail={userEmail}
+        />
+      )}
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto">
-          <div className={`${settings.wideLayout ? 'max-w-none' : 'max-w-7xl'} mx-auto px-4 sm:px-6 lg:px-8 py-8 transition-all duration-300`}>
+          <div className={`${contentContainerClass} transition-all duration-300`}>
             {currentView === 'dashboard' && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -297,6 +336,13 @@ function App() {
 
             {currentView === 'connection-analytics' && (
               <AnalyticsDashboard />
+            )}
+
+            {currentView === 'office-map' && (
+              <OfficeMapSampleV2
+                onViewChange={handleViewChange}
+                currentUserEmail={userEmail}
+              />
             )}
 
             {currentView === 'developer-mode' && (
