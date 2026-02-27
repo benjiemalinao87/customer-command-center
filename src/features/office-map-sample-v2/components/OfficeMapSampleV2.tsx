@@ -2267,15 +2267,39 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
             const isSelected = selectedOffice === office.id;
             const isMatch = isSearchActive && matchedOfficeIds.has(office.id);
             const isDimmed = isSearchActive && !matchedOfficeIds.has(office.id);
+
+            const openOffice = () => {
+              onViewChange(office.id);
+            };
+
             return (
               <button
                 key={office.id}
                 type="button"
                 data-office-node="true"
                 data-no-pan="true"
-                onClick={() => onViewChange(office.id)}
+                onPointerDown={(event) => {
+                  // Keep card taps isolated from viewport drag handlers.
+                  event.stopPropagation();
+                }}
+                onPointerUp={(event) => {
+                  // Single left-click/tap should always navigate.
+                  if (event.button !== 0) {
+                    return;
+                  }
+                  event.stopPropagation();
+                  openOffice();
+                }}
+                onClick={(event) => {
+                  // Keyboard activation (Enter/Space) triggers click with detail 0.
+                  if (event.detail === 0) {
+                    event.stopPropagation();
+                    openOffice();
+                  }
+                }}
                 onContextMenu={(event) => {
                   event.preventDefault();
+                  event.stopPropagation();
                   setSelectedOffice(office.id);
                   centerOnOffice(office.id);
                 }}
