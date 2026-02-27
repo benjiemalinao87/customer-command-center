@@ -49,6 +49,15 @@ import {
 import { getActiveSessions } from '../../../lib/supabaseAdmin';
 import { getAllowedUserEmails } from '../../../lib/allowedUsers';
 import { supabase } from '../../../lib/supabase';
+import { getEffectiveLimit, useWorkspaceHealth } from '../hooks/useWorkspaceHealth';
+import {
+  computeWorkspaceLayout,
+  WORKSPACE_ZONE_BOUNDS,
+  type WorkspaceNode,
+  type WorkspaceStatus,
+} from '../utils/workspaceLayout';
+import { WorkspaceHealthCard } from './WorkspaceHealthCard';
+import { WorkspaceDetailPanel } from './WorkspaceDetailPanel';
 
 type OfficeMapSampleV2View =
   | 'dashboard'
@@ -77,6 +86,8 @@ type OfficeMapSampleV2View =
 
 type MapMode = 'demo' | 'live' | 'blend';
 type DensityMode = 'comfortable' | 'compact';
+type CanvasContent = 'offices' | 'workspaces';
+type WorkspaceFilter = 'all' | WorkspaceStatus;
 
 interface Neighborhood {
   id: string;
@@ -174,7 +185,7 @@ interface OfficeMapSampleV2Props {
   currentUserEmail: string | null;
 }
 
-const MIN_ZOOM = 0.75;
+const MIN_ZOOM = 0.35;
 const MAX_ZOOM = 2.2;
 const LIVE_REFRESH_VISIBLE_MS = 60000;
 const LIVE_REALTIME_DEBOUNCE_MS = 600;
@@ -238,6 +249,36 @@ const NEIGHBORHOODS: Neighborhood[] = [
     width: 27,
     height: 46,
     tintClass: 'from-rose-500/12 to-pink-400/5',
+  },
+];
+
+const WORKSPACE_ZONES: Array<{
+  status: WorkspaceStatus;
+  label: string;
+  tintClass: string;
+  borderClass: string;
+  textClass: string;
+}> = [
+  {
+    status: 'critical',
+    label: 'Critical Workspaces',
+    tintClass: 'from-red-500/14 to-rose-500/4',
+    borderClass: 'border-red-500/30',
+    textClass: 'text-red-300',
+  },
+  {
+    status: 'warning',
+    label: 'Warning Workspaces',
+    tintClass: 'from-amber-500/14 to-orange-500/4',
+    borderClass: 'border-amber-500/30',
+    textClass: 'text-amber-300',
+  },
+  {
+    status: 'healthy',
+    label: 'Healthy Workspaces',
+    tintClass: 'from-cyan-500/12 to-sky-500/4',
+    borderClass: 'border-cyan-500/25',
+    textClass: 'text-cyan-300',
   },
 ];
 
@@ -868,10 +909,16 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
       .join(' ');
   }, [currentUserEmail]);
 
+  const [canvasContent, setCanvasContent] = useState<CanvasContent>('offices');
+  const [selectedWorkspace, setSelectedWorkspace] = useState<string | null>(null);
+  const [workspaceFilter, setWorkspaceFilter] = useState<WorkspaceFilter>('all');
+  const [expandedHealthy, setExpandedHealthy] = useState(false);
+  const [pinnedWorkspaceIds, setPinnedWorkspaceIds] = useState<Set<string>>(() => new Set());
   const [mapMode, setMapMode] = useState<MapMode>('blend');
-  const [density, setDensity] = useState<DensityMode>('comfortable');
+  const [density] = useState<DensityMode>('compact');
   const [showHeat, setShowHeat] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const isSearchActive = searchTerm.trim().length > 0;
   const [selectedOffice, setSelectedOffice] = useState<OfficeMapSampleV2View | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -897,6 +944,32 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
   const [isTabVisible, setIsTabVisible] = useState(() => document.visibilityState === 'visible');
   const allowlistedEmails = useMemo(() => new Set(getAllowedUserEmails()), []);
   const allowlistEnabled = allowlistedEmails.size > 0;
+
+  // Workspace health data (only fetches when workspace view is active)
+  const {
+    workspaces: healthWorkspaces,
+    loading: healthLoading,
+    error: healthError,
+    lastUpdatedAt: healthUpdatedAt,
+    refresh: refreshHealth,
+  } = useWorkspaceHealth({ enabled: canvasContent === 'workspaces' });
+
+  const workspaceNodes = useMemo<WorkspaceNode[]>(() => {
+    return computeWorkspaceLayout(healthWorkspaces, density);
+  }, [healthWorkspaces, density]);
+
+  const workspaceStatusCounts = useMemo(() => {
+    return workspaceNodes.reduce((acc, workspace) => {
+      acc[workspace.status] += 1;
+      return acc;
+    }, { critical: 0, warning: 0, healthy: 0 });
+  }, [workspaceNodes]);
+
+  const filteredWorkspaceNodes = useMemo(() => {
+    if (canvasContent !== 'workspaces') return [];
+    if (workspaceFilter === 'all') return workspaceNodes;
+    return workspaceNodes.filter((workspace) => workspace.status === workspaceFilter);
+  }, [canvasContent, workspaceFilter, workspaceNodes]);
 
   const syncViewportMetrics = useCallback(() => {
     const element = viewportRef.current;
@@ -1252,6 +1325,12 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
       .slice(0, 4);
   }, [officeTraffic]);
 
+  const busiestWorkspaces = useMemo(() => {
+    return [...filteredWorkspaceNodes]
+      .sort((a, b) => b.riskScore - a.riskScore)
+      .slice(0, 5);
+  }, [filteredWorkspaceNodes]);
+
   const maxTraffic = useMemo(() => {
     return Math.max(1, ...Object.values(officeTraffic));
   }, [officeTraffic]);
@@ -1273,17 +1352,94 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
     return new Set(filteredOffices.map((o) => o.id));
   }, [filteredOffices]);
 
-  const isSearchActive = searchTerm.trim().length > 0;
-
   // Set of neighborhood IDs that contain at least one matched office
   const matchedNeighborhoodIds = useMemo(() => {
     if (!isSearchActive) return new Set<string>();
     return new Set(filteredOffices.map((o) => o.neighborhoodId));
   }, [filteredOffices, isSearchActive]);
 
+  // Workspace search
+  const filteredWorkspaces = useMemo(() => {
+    if (canvasContent !== 'workspaces') return [];
+    const query = normalizeText(searchTerm);
+    if (!query) return [];
+    return filteredWorkspaceNodes.filter((ws) => {
+      const haystack = `${ws.workspace_name} ${ws.workspace_id}`.toLowerCase();
+      return haystack.includes(query);
+    }).slice(0, 8);
+  }, [canvasContent, filteredWorkspaceNodes, searchTerm]);
+
+  const matchedWorkspaceIds = useMemo(() => new Set(filteredWorkspaces.map((w) => w.workspace_id)), [filteredWorkspaces]);
+
+  const shouldCollapseHealthy = useMemo(() => {
+    if (canvasContent !== 'workspaces' || workspaceFilter !== 'all' || isSearchActive || expandedHealthy) {
+      return false;
+    }
+    return workspaceNodes.filter((workspace) => workspace.status === 'healthy').length > 24;
+  }, [canvasContent, expandedHealthy, isSearchActive, workspaceFilter, workspaceNodes]);
+
+  const visibleWorkspaceSeedNodes = useMemo(() => {
+    if (canvasContent !== 'workspaces') {
+      return [];
+    }
+
+    const orderedNodes = [...filteredWorkspaceNodes].sort((a, b) => {
+      const aPinned = pinnedWorkspaceIds.has(a.workspace_id) ? 1 : 0;
+      const bPinned = pinnedWorkspaceIds.has(b.workspace_id) ? 1 : 0;
+      if (aPinned !== bPinned) {
+        return bPinned - aPinned;
+      }
+      return b.riskScore - a.riskScore;
+    });
+
+    if (!shouldCollapseHealthy) {
+      return orderedNodes;
+    }
+
+    const nonHealthy = orderedNodes.filter((workspace) => workspace.status !== 'healthy');
+    const healthy = orderedNodes.filter((workspace) => workspace.status === 'healthy');
+    const pinnedHealthy = healthy.filter((workspace) => pinnedWorkspaceIds.has(workspace.workspace_id));
+    const unpinnedHealthy = healthy.filter((workspace) => !pinnedWorkspaceIds.has(workspace.workspace_id));
+
+    return [...nonHealthy, ...pinnedHealthy, ...unpinnedHealthy.slice(0, 12)];
+  }, [canvasContent, filteredWorkspaceNodes, pinnedWorkspaceIds, shouldCollapseHealthy]);
+
+  const visibleWorkspaceNodes = useMemo<WorkspaceNode[]>(() => {
+    if (canvasContent !== 'workspaces') {
+      return [];
+    }
+
+    // Re-layout only what is visible so collapsed views don't inherit cramped coordinates.
+    return computeWorkspaceLayout(visibleWorkspaceSeedNodes, density);
+  }, [canvasContent, density, visibleWorkspaceSeedNodes]);
+
+  const hiddenHealthyCount = useMemo(() => {
+    if (!shouldCollapseHealthy) {
+      return 0;
+    }
+
+    const totalHealthy = filteredWorkspaceNodes.filter((workspace) => workspace.status === 'healthy').length;
+    const visibleHealthy = visibleWorkspaceNodes.filter((workspace) => workspace.status === 'healthy').length;
+    return Math.max(0, totalHealthy - visibleHealthy);
+  }, [filteredWorkspaceNodes, shouldCollapseHealthy, visibleWorkspaceNodes]);
+
+  const canToggleHealthy = useMemo(() => {
+    return canvasContent === 'workspaces'
+      && workspaceFilter === 'all'
+      && !isSearchActive
+      && workspaceStatusCounts.healthy > 24;
+  }, [canvasContent, isSearchActive, workspaceFilter, workspaceStatusCounts.healthy]);
+
   const selectedOfficeNode = useMemo(() => {
     return selectedOffice ? officeById.get(selectedOffice) || null : null;
   }, [officeById, selectedOffice]);
+
+  const selectedWorkspaceNode = useMemo(() => {
+    if (!selectedWorkspace) {
+      return null;
+    }
+    return workspaceNodes.find((workspace) => workspace.workspace_id === selectedWorkspace) || null;
+  }, [selectedWorkspace, workspaceNodes]);
 
   const setZoomWithAnchor = useCallback((nextZoomValue: number, anchorX: number, anchorY: number) => {
     setZoom((currentZoom) => {
@@ -1317,12 +1473,38 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
     setPan(clampPan(nextPan, nextZoom, viewportMetrics));
   }, [officeById, viewportMetrics, zoom]);
 
+  const centerOnWorkspace = useCallback((workspace: WorkspaceNode, desiredZoom?: number) => {
+    if (viewportMetrics.width <= 0 || viewportMetrics.height <= 0) {
+      return;
+    }
+
+    const nextZoom = clamp(desiredZoom ?? Math.max(zoom, 1.15), MIN_ZOOM, MAX_ZOOM);
+    const nextPan = {
+      x: viewportMetrics.width / 2 - (workspace.x / 100) * viewportMetrics.width * nextZoom,
+      y: viewportMetrics.height / 2 - (workspace.y / 100) * viewportMetrics.height * nextZoom,
+    };
+
+    setZoom(nextZoom);
+    setPan(clampPan(nextPan, nextZoom, viewportMetrics));
+  }, [viewportMetrics, zoom]);
+
   // Auto-pan to first search match
   useEffect(() => {
-    if (filteredOffices.length > 0) {
+    if (canvasContent === 'offices' && filteredOffices.length > 0) {
       centerOnOffice(filteredOffices[0].id);
+    } else if (canvasContent === 'workspaces' && filteredWorkspaces.length > 0) {
+      const ws = filteredWorkspaces[0];
+      if (viewportMetrics.width > 0 && viewportMetrics.height > 0) {
+        const nextZoom = clamp(Math.max(zoom, 1.2), MIN_ZOOM, MAX_ZOOM);
+        const nextPan = {
+          x: viewportMetrics.width / 2 - (ws.x / 100) * viewportMetrics.width * nextZoom,
+          y: viewportMetrics.height / 2 - (ws.y / 100) * viewportMetrics.height * nextZoom,
+        };
+        setZoom(nextZoom);
+        setPan(clampPan(nextPan, nextZoom, viewportMetrics));
+      }
     }
-  }, [filteredOffices, centerOnOffice]);
+  }, [filteredOffices, filteredWorkspaces, centerOnOffice, canvasContent, viewportMetrics, zoom]);
 
   const handleWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -1338,15 +1520,15 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
     const rect = event.currentTarget.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
-    const isOfficeNode = Boolean(target.closest('[data-office-node="true"]'));
-    const isUiControl = Boolean(target.closest('[data-no-pan="true"]')) && !isOfficeNode;
+    const isMapNode = Boolean(target.closest('[data-office-node="true"], [data-workspace-node="true"]'));
+    const isUiControl = Boolean(target.closest('[data-no-pan="true"]')) && !isMapNode;
 
     setCursorFx((previous) => ({
       ...previous,
       x,
       y,
       visible: !isUiControl,
-      overOffice: isOfficeNode,
+      overOffice: isMapNode,
       burstId: !isUiControl ? previous.burstId + 1 : previous.burstId,
       burstX: !isUiControl ? x : previous.burstX,
       burstY: !isUiControl ? y : previous.burstY,
@@ -1374,13 +1556,13 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
     const rect = event.currentTarget.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
-    const isOfficeNode = Boolean(target.closest('[data-office-node="true"]'));
-    const isUiControl = Boolean(target.closest('[data-no-pan="true"]')) && !isOfficeNode;
+    const isMapNode = Boolean(target.closest('[data-office-node="true"], [data-workspace-node="true"]'));
+    const isUiControl = Boolean(target.closest('[data-no-pan="true"]')) && !isMapNode;
 
     setCursorFx((previous) => {
       const samePosition = Math.abs(previous.x - x) < 0.2 && Math.abs(previous.y - y) < 0.2;
       const nextVisible = !isUiControl;
-      if (samePosition && previous.visible === nextVisible && previous.overOffice === isOfficeNode) {
+      if (samePosition && previous.visible === nextVisible && previous.overOffice === isMapNode) {
         return previous;
       }
 
@@ -1389,7 +1571,7 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
         x,
         y,
         visible: nextVisible,
-        overOffice: isOfficeNode,
+        overOffice: isMapNode,
       };
     });
 
@@ -1451,6 +1633,12 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
     centerOnOffice(officeId);
     setSearchTerm('');
   }, [centerOnOffice]);
+
+  const focusWorkspace = useCallback((workspace: WorkspaceNode) => {
+    setSelectedWorkspace(workspace.workspace_id);
+    centerOnWorkspace(workspace);
+    setSearchTerm('');
+  }, [centerOnWorkspace]);
 
   const toggleFullMode = useCallback(async () => {
     const viewport = viewportRef.current;
@@ -1590,19 +1778,47 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
               <Sparkles className="w-4 h-4 text-blue-500" />
               <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Office Map</h2>
             </div>
-            <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-              <span>{NEIGHBORHOODS.length} zones</span>
-              <span className="text-slate-300 dark:text-slate-600">/</span>
-              <span>{activeAvatars.length} active</span>
-              <span className="text-slate-300 dark:text-slate-600">/</span>
-              <span className={liveStatusLabel === 'Live synced' ? 'text-emerald-500' : ''}>{liveStatusLabel}</span>
-              {lastLiveSyncAt && (
-                <>
-                  <span className="text-slate-300 dark:text-slate-600">/</span>
-                  <span>{new Date(lastLiveSyncAt).toLocaleTimeString()}</span>
-                </>
-              )}
-            </div>
+            {canvasContent === 'workspaces' ? (
+              <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                <span>{healthWorkspaces.length} workspaces</span>
+                <span className="text-slate-300 dark:text-slate-600">/</span>
+                <span className="text-red-400">{workspaceStatusCounts.critical} critical</span>
+                <span className="text-slate-300 dark:text-slate-600">/</span>
+                <span className="text-amber-400">{workspaceStatusCounts.warning} warning</span>
+                <span className="text-slate-300 dark:text-slate-600">/</span>
+                <span>{workspaceStatusCounts.healthy} healthy</span>
+                <span className="text-slate-300 dark:text-slate-600">/</span>
+                <span>Auto-refresh 30s</span>
+                {healthUpdatedAt && (
+                  <>
+                    <span className="text-slate-300 dark:text-slate-600">/</span>
+                    <span>{healthUpdatedAt.toLocaleTimeString()}</span>
+                  </>
+                )}
+                {healthError && (
+                  <>
+                    <span className="text-slate-300 dark:text-slate-600">/</span>
+                    <span className="text-red-300 max-w-[220px] truncate">Health sync issue</span>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                <span>{NEIGHBORHOODS.length} zones</span>
+                <span className="text-slate-300 dark:text-slate-600">/</span>
+                <span>{activeAvatars.length} active</span>
+                <span className="text-slate-300 dark:text-slate-600">/</span>
+                <span className={liveStatusLabel === 'Live synced' ? 'text-emerald-500' : ''}>{liveStatusLabel}</span>
+                <span className="text-slate-300 dark:text-slate-600">/</span>
+                <span>{liveCadenceLabel}</span>
+                {lastLiveSyncAt && (
+                  <>
+                    <span className="text-slate-300 dark:text-slate-600">/</span>
+                    <span>{new Date(lastLiveSyncAt).toLocaleTimeString()}</span>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="relative w-full lg:w-[320px]">
@@ -1612,7 +1828,7 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
               type="text"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search offices..."
+              placeholder={canvasContent === 'workspaces' ? 'Search workspaces...' : 'Search offices...'}
               className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 pl-9 pr-8 py-2 text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
             />
             {searchTerm && (
@@ -1625,7 +1841,7 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
                 ✕
               </button>
             )}
-            {filteredOffices.length > 0 && (
+            {canvasContent === 'offices' && filteredOffices.length > 0 && (
               <div
                 data-no-pan="true"
                 className="absolute z-30 mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl overflow-hidden"
@@ -1650,63 +1866,184 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
                 })}
               </div>
             )}
+            {canvasContent === 'workspaces' && filteredWorkspaces.length > 0 && (
+              <div
+                data-no-pan="true"
+                className="absolute z-30 mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl overflow-hidden"
+              >
+                {filteredWorkspaces.map((ws) => (
+                  <button
+                    key={ws.workspace_id}
+                    type="button"
+                    data-no-pan="true"
+                    onClick={() => focusWorkspace(ws)}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center gap-2"
+                  >
+                    <div className={`w-5 h-5 rounded ${ws.accentClass} flex items-center justify-center`}>
+                      <Building2 className="w-3 h-3 text-white" />
+                    </div>
+                    {ws.workspace_name}
+                    <span className="ml-auto text-[11px] text-slate-400">{ws.workspace_id}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       <div className="rounded-xl border border-slate-200/50 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 px-4 py-2">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1 mr-2">
-            <div className="grid grid-cols-3 gap-1">
-              <button
-                type="button"
-                data-no-pan="true"
-                onClick={() => setMapMode('demo')}
-                className={`rounded-md px-2 py-1 text-[11px] font-medium border transition-colors ${mapMode === 'demo'
-                  ? 'bg-blue-600 border-blue-600 text-white'
-                  : 'border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700'
-                  }`}
-              >
-                Demo
-              </button>
-              <button
-                type="button"
-                data-no-pan="true"
-                onClick={() => setMapMode('live')}
-                className={`rounded-md px-2 py-1 text-[11px] font-medium border transition-colors ${mapMode === 'live'
-                  ? 'bg-emerald-600 border-emerald-600 text-white'
-                  : 'border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700'
-                  }`}
-              >
-                Live
-              </button>
-              <button
-                type="button"
-                data-no-pan="true"
-                onClick={() => setMapMode('blend')}
-                className={`rounded-md px-2 py-1 text-[11px] font-medium border transition-colors ${mapMode === 'blend'
-                  ? 'bg-violet-600 border-violet-600 text-white'
-                  : 'border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700'
-                  }`}
-              >
-                Blend
-              </button>
-            </div>
+          {/* Canvas content toggle */}
+          <div className="flex items-center gap-1 mr-1">
+            <button
+              type="button"
+              data-no-pan="true"
+              onClick={() => {
+                setCanvasContent('offices');
+                setSelectedWorkspace(null);
+                setWorkspaceFilter('all');
+                setSearchTerm('');
+                setZoom(1);
+                setPan(clampPan({ x: 0, y: 0 }, 1, viewportMetrics));
+              }}
+              className={`rounded-md px-2.5 py-1 text-[11px] font-medium border transition-colors ${canvasContent === 'offices'
+                ? 'bg-slate-800 border-slate-600 text-white'
+                : 'border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700'
+                }`}
+            >
+              Offices
+            </button>
+            <button
+              type="button"
+              data-no-pan="true"
+              onClick={() => {
+                setCanvasContent('workspaces');
+                setSelectedOffice(null);
+                setSearchTerm('');
+                setExpandedHealthy(false);
+                setZoom(0.85);
+                setPan(clampPan({ x: 0, y: 0 }, 0.85, viewportMetrics));
+              }}
+              className={`rounded-md px-2.5 py-1 text-[11px] font-medium border transition-colors ${canvasContent === 'workspaces'
+                ? 'bg-emerald-600 border-emerald-600 text-white'
+                : 'border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700'
+                }`}
+            >
+              Workspaces
+            </button>
           </div>
 
           <div className="h-4 w-px bg-slate-300 dark:bg-slate-700" />
 
-          <button
-            type="button"
-            data-no-pan="true"
-            onClick={() => setDensity(density === 'comfortable' ? 'compact' : 'comfortable')}
-            className={`rounded-md px-2 py-1 text-[11px] font-medium border transition-colors ${density === 'compact'
-              ? 'bg-slate-800 border-slate-700 text-white'
-              : 'border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700'
-              }`}
-          >
-            {density === 'compact' ? 'Compact' : 'Comfortable'}
-          </button>
+          {canvasContent === 'offices' ? (
+            <div className="flex items-center gap-1 mr-2">
+              <div className="grid grid-cols-3 gap-1">
+                <button
+                  type="button"
+                  data-no-pan="true"
+                  onClick={() => setMapMode('demo')}
+                  className={`rounded-md px-2 py-1 text-[11px] font-medium border transition-colors ${mapMode === 'demo'
+                    ? 'bg-blue-600 border-blue-600 text-white'
+                    : 'border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700'
+                    }`}
+                >
+                  Demo
+                </button>
+                <button
+                  type="button"
+                  data-no-pan="true"
+                  onClick={() => setMapMode('live')}
+                  className={`rounded-md px-2 py-1 text-[11px] font-medium border transition-colors ${mapMode === 'live'
+                    ? 'bg-emerald-600 border-emerald-600 text-white'
+                    : 'border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700'
+                    }`}
+                >
+                  Live
+                </button>
+                <button
+                  type="button"
+                  data-no-pan="true"
+                  onClick={() => setMapMode('blend')}
+                  className={`rounded-md px-2 py-1 text-[11px] font-medium border transition-colors ${mapMode === 'blend'
+                    ? 'bg-violet-600 border-violet-600 text-white'
+                    : 'border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700'
+                    }`}
+                >
+                  Blend
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-1.5 mr-2">
+              <button
+                type="button"
+                data-no-pan="true"
+                onClick={() => setWorkspaceFilter('all')}
+                className={`rounded-md px-2 py-1 text-[11px] font-medium border transition-colors ${workspaceFilter === 'all'
+                  ? 'bg-slate-800 border-slate-700 text-white'
+                  : 'border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700'
+                  }`}
+              >
+                All ({workspaceNodes.length})
+              </button>
+              <button
+                type="button"
+                data-no-pan="true"
+                onClick={() => setWorkspaceFilter('critical')}
+                className={`rounded-md px-2 py-1 text-[11px] font-medium border transition-colors ${workspaceFilter === 'critical'
+                  ? 'bg-red-600 border-red-600 text-white'
+                  : 'border-red-500/60 text-red-300 hover:text-red-200'
+                  }`}
+              >
+                Critical ({workspaceStatusCounts.critical})
+              </button>
+              <button
+                type="button"
+                data-no-pan="true"
+                onClick={() => setWorkspaceFilter('warning')}
+                className={`rounded-md px-2 py-1 text-[11px] font-medium border transition-colors ${workspaceFilter === 'warning'
+                  ? 'bg-amber-600 border-amber-600 text-white'
+                  : 'border-amber-500/60 text-amber-300 hover:text-amber-200'
+                  }`}
+              >
+                Warning ({workspaceStatusCounts.warning})
+              </button>
+              <button
+                type="button"
+                data-no-pan="true"
+                onClick={() => setWorkspaceFilter('healthy')}
+                className={`rounded-md px-2 py-1 text-[11px] font-medium border transition-colors ${workspaceFilter === 'healthy'
+                  ? 'bg-cyan-600 border-cyan-600 text-white'
+                  : 'border-cyan-500/60 text-cyan-300 hover:text-cyan-200'
+                  }`}
+              >
+                Healthy ({workspaceStatusCounts.healthy})
+              </button>
+              <button
+                type="button"
+                data-no-pan="true"
+                onClick={() => { void refreshHealth(); }}
+                className="rounded-md px-2 py-1 text-[11px] font-medium border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700 inline-flex items-center gap-1"
+              >
+                <RefreshCw className={`w-3 h-3 ${healthLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+              {canToggleHealthy && (
+                <button
+                  type="button"
+                  data-no-pan="true"
+                  onClick={() => setExpandedHealthy((previous) => !previous)}
+                  className="rounded-md px-2 py-1 text-[11px] font-medium border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700"
+                >
+                  {expandedHealthy ? `Collapse healthy (${workspaceStatusCounts.healthy})` : `Show ${hiddenHealthyCount} more healthy`}
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="h-4 w-px bg-slate-300 dark:bg-slate-700" />
+
           <button
             type="button"
             data-no-pan="true"
@@ -1723,8 +2060,9 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
             type="button"
             data-no-pan="true"
             onClick={() => {
-              setZoom(1);
-              setPan(clampPan({ x: 0, y: 0 }, 1, viewportMetrics));
+              const resetZoom = canvasContent === 'workspaces' ? 0.85 : 1;
+              setZoom(resetZoom);
+              setPan(clampPan({ x: 0, y: 0 }, resetZoom, viewportMetrics));
             }}
             className="rounded-md px-2 py-1 text-[11px] font-medium border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700 inline-flex items-center gap-1"
           >
@@ -1748,7 +2086,95 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.16),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(244,114,182,0.16),transparent_42%)]" />
 
         <div className="absolute inset-0" style={{ transform: worldTransform, transformOrigin: '0 0' }}>
-          {NEIGHBORHOODS.map((neighborhood) => {
+          {/* ===== WORKSPACE HEALTH VIEW ===== */}
+          {canvasContent === 'workspaces' && (
+            <>
+              {WORKSPACE_ZONES.map((zone) => {
+                const isFocused = workspaceFilter === 'all' || workspaceFilter === zone.status;
+                const count = workspaceStatusCounts[zone.status];
+                const bounds = WORKSPACE_ZONE_BOUNDS[zone.status];
+
+                return (
+                  <div
+                    key={`workspace-zone-${zone.status}`}
+                    className={`pointer-events-none absolute left-[3%] w-[94%] rounded-2xl border bg-gradient-to-br ${zone.tintClass} ${zone.borderClass} transition-opacity duration-300`}
+                    style={{
+                      top: `${bounds.top}%`,
+                      height: `${bounds.bottom - bounds.top}%`,
+                      opacity: isFocused ? 1 : 0.28,
+                    }}
+                  >
+                    <div className="absolute left-4 top-3 z-50 inline-flex items-center gap-2 rounded-md border border-slate-700/70 bg-slate-950/92 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300 shadow-sm">
+                      <span className={zone.textClass}>{zone.label}</span>
+                      <span className="text-slate-500">{count}</span>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {healthLoading && workspaceNodes.length === 0 && (
+                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2 text-slate-400">
+                  <RefreshCw className="w-5 h-5 animate-spin" />
+                  <span className="text-sm">Loading workspaces...</span>
+                </div>
+              )}
+
+              {healthError && (
+                <div className="absolute left-4 top-4 z-30 rounded-lg border border-red-500/40 bg-red-950/70 px-3 py-2 text-xs text-red-200">
+                  Workspace health sync failed: {healthError}
+                </div>
+              )}
+
+              {!healthLoading && !healthError && visibleWorkspaceNodes.length === 0 && (
+                <div className="absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 rounded-lg border border-slate-700 bg-slate-900/90 px-4 py-3 text-center text-sm text-slate-300">
+                  No workspaces match this filter.
+                </div>
+              )}
+
+              {showHeat && visibleWorkspaceNodes.map((ws) => {
+                const limit = getEffectiveLimit(ws);
+                const usage = limit > 0 ? ws.stats.active / limit : 0;
+                const size = 100 + usage * 140;
+                const opacity = 0.08 + usage * 0.28;
+                return (
+                  <div
+                    key={`${ws.workspace_id}-heat`}
+                    className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl pointer-events-none"
+                    style={{
+                      left: `${ws.x}%`, top: `${ws.y}%`,
+                      width: `${size}px`, height: `${size}px`,
+                      background: ws.healthColor,
+                      opacity,
+                    }}
+                  />
+                );
+              })}
+
+              {visibleWorkspaceNodes.map((ws) => (
+                <WorkspaceHealthCard
+                  key={ws.workspace_id}
+                  node={ws}
+                  isSelected={selectedWorkspace === ws.workspace_id}
+                  isSearchMatch={isSearchActive && matchedWorkspaceIds.has(ws.workspace_id)}
+                  isDimmed={isSearchActive && !matchedWorkspaceIds.has(ws.workspace_id)}
+                  density={density}
+                  onSelect={(id) => setSelectedWorkspace(id)}
+                  onCenter={() => centerOnWorkspace(ws)}
+                  onTogglePin={(id) => {
+                    setPinnedWorkspaceIds((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(id)) next.delete(id); else next.add(id);
+                      return next;
+                    });
+                  }}
+                  isPinned={pinnedWorkspaceIds.has(ws.workspace_id)}
+                />
+              ))}
+            </>
+          )}
+
+          {/* ===== OFFICES VIEW ===== */}
+          {canvasContent === 'offices' && NEIGHBORHOODS.map((neighborhood) => {
             const dimNeighborhood = isSearchActive && !matchedNeighborhoodIds.has(neighborhood.id);
             return (
               <div
@@ -1765,7 +2191,7 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
             );
           })}
 
-          {NEIGHBORHOODS.map((neighborhood) => {
+          {canvasContent === 'offices' && NEIGHBORHOODS.map((neighborhood) => {
             const dimNeighborhood = isSearchActive && !matchedNeighborhoodIds.has(neighborhood.id);
             return (
               <div
@@ -1783,7 +2209,7 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
             );
           })}
 
-          {showHeat && OFFICES.map((office) => {
+          {canvasContent === 'offices' && showHeat && OFFICES.map((office) => {
             const intensity = officeTraffic[office.id] / maxTraffic;
             const size = 120 + intensity * 120;
             const opacity = 0.1 + intensity * 0.32;
@@ -1803,7 +2229,7 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
             );
           })}
 
-          <svg className="absolute inset-0 h-full w-full pointer-events-none" aria-hidden="true">
+          {canvasContent === 'offices' && <svg className="absolute inset-0 h-full w-full pointer-events-none" aria-hidden="true">
             <defs>
               <linearGradient id="office-map-v2-edge" x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stopColor="rgba(96,165,250,0.35)" />
@@ -1834,9 +2260,9 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
                 />
               );
             })}
-          </svg>
+          </svg>}
 
-          {OFFICES.map((office) => {
+          {canvasContent === 'offices' && OFFICES.map((office) => {
             const Icon = office.icon;
             const isSelected = selectedOffice === office.id;
             const isMatch = isSearchActive && matchedOfficeIds.has(office.id);
@@ -1874,7 +2300,7 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
                       {officeTraffic[office.id]}
                     </span>
                   </div>
-                  {false && density === 'comfortable' && (
+                  {density === 'comfortable' && (
                     <div className="mt-2 text-[10px] text-slate-400">
                       Left click opens module. Right click recenters.
                     </div>
@@ -1884,7 +2310,7 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
             );
           })}
 
-          {positionedAvatars.map((avatar) => (
+          {canvasContent === 'offices' && positionedAvatars.map((avatar) => (
             <div
               key={avatar.id}
               className="absolute -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none"
@@ -1984,6 +2410,15 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
             data-no-pan="true"
             className="w-8 h-8 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 flex items-center justify-center"
             onClick={() => {
+              if (canvasContent === 'workspaces') {
+                if (selectedWorkspaceNode) {
+                  centerOnWorkspace(selectedWorkspaceNode, Math.max(zoom, 1.2));
+                } else {
+                  setZoomWithAnchor(0.85, viewportMetrics.width / 2, viewportMetrics.height / 2);
+                }
+                return;
+              }
+
               if (selectedOfficeNode) {
                 centerOnOffice(selectedOfficeNode.id, Math.max(zoom, 1.25));
               } else {
@@ -2015,20 +2450,20 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
         >
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Traffic Leaders
+              {canvasContent === 'workspaces' ? 'Busiest Workspaces' : 'Traffic Leaders'}
             </div>
             <button
               type="button"
               data-no-pan="true"
               onClick={() => setIsTrafficLeadersMinimized((previous) => !previous)}
               className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700"
-              title={isTrafficLeadersMinimized ? 'Expand traffic leaders' : 'Minimize traffic leaders'}
+              title={isTrafficLeadersMinimized ? 'Expand' : 'Minimize'}
             >
               {isTrafficLeadersMinimized ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
             </button>
           </div>
 
-          {!isTrafficLeadersMinimized && (
+          {!isTrafficLeadersMinimized && canvasContent === 'offices' && (
             <div className="mt-2 space-y-1.5">
               {busiestOffices.map((office) => (
                 <button
@@ -2046,6 +2481,34 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
               ))}
             </div>
           )}
+
+          {!isTrafficLeadersMinimized && canvasContent === 'workspaces' && (
+            <div className="mt-2 space-y-1.5">
+              {busiestWorkspaces.map((ws) => (
+                <button
+                  key={ws.workspace_id}
+                  type="button"
+                  data-no-pan="true"
+                  onClick={() => focusWorkspace(ws)}
+                  className="w-full text-left rounded-md px-2 py-1 hover:bg-slate-800 transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-slate-200 truncate">{ws.workspace_name}</span>
+                    <span className={`text-[10px] ${
+                      ws.status === 'critical'
+                        ? 'text-red-300'
+                        : ws.status === 'warning'
+                        ? 'text-amber-300'
+                        : 'text-cyan-300'
+                    }`}
+                    >
+                      {Math.round(ws.usagePercent)}%
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div data-no-pan="true" className="absolute bottom-4 right-4 rounded-xl border border-slate-700/80 bg-slate-900/90 p-3 shadow-lg">
@@ -2057,7 +2520,7 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
             className="relative w-48 h-32 rounded-lg border border-slate-700 bg-slate-950 cursor-crosshair overflow-hidden"
             onClick={handleMiniMapClick}
           >
-            {NEIGHBORHOODS.map((neighborhood) => (
+            {canvasContent === 'offices' && NEIGHBORHOODS.map((neighborhood) => (
               <div
                 key={`mini-${neighborhood.id}`}
                 className="absolute border border-slate-700/70 bg-slate-800/40 rounded-sm"
@@ -2070,11 +2533,19 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
               />
             ))}
 
-            {OFFICES.map((office) => (
+            {canvasContent === 'offices' && OFFICES.map((office) => (
               <div
                 key={`mini-office-${office.id}`}
                 className={`absolute -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${office.accentClass} ${selectedOffice === office.id ? 'ring-2 ring-white' : ''}`}
                 style={{ left: `${office.x}%`, top: `${office.y}%` }}
+              />
+            ))}
+
+            {canvasContent === 'workspaces' && visibleWorkspaceNodes.map((ws) => (
+              <div
+                key={`mini-ws-${ws.workspace_id}`}
+                className={`absolute -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${ws.accentClass} ${selectedWorkspace === ws.workspace_id ? 'ring-2 ring-white' : ''}`}
+                style={{ left: `${ws.x}%`, top: `${ws.y}%` }}
               />
             ))}
 
@@ -2089,6 +2560,15 @@ export function OfficeMapSampleV2({ onViewChange, currentUserEmail }: OfficeMapS
             />
           </div>
         </div>
+
+        {/* Workspace detail panel */}
+        {canvasContent === 'workspaces' && selectedWorkspaceNode && (
+          <WorkspaceDetailPanel
+            workspace={selectedWorkspaceNode}
+            onClose={() => setSelectedWorkspace(null)}
+            onRefresh={refreshHealth}
+          />
+        )}
       </div>
     </div>
   );
