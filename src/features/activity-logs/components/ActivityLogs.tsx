@@ -4,9 +4,10 @@
  * Queries the audit_logs Supabase table populated by auditLogger service.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Filter, LogIn, LogOut, Eye, Zap, Clock, RefreshCw, User,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { getSessionViewLabel } from '../../../lib/sessionViews';
@@ -31,22 +32,25 @@ const ACTION_CONFIG: Record<string, { label: string; icon: typeof LogIn; color: 
 
 const DEFAULT_CONFIG = { label: 'Event', icon: Zap, color: 'bg-gray-500/10 text-gray-400 border-gray-500/30' };
 
+const PAGE_SIZE = 20;
+
 export function ActivityLogs() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filterAction, setFilterAction] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [limit, setLimit] = useState(50);
   const [dateRange, setDateRange] = useState('all');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(PAGE_SIZE);
 
-  useEffect(() => {
-    loadLogs();
-  }, [filterAction, limit, dateRange, fromDate, toDate]);
+  // Stats (fetched separately so they reflect the full dataset, not just current page)
+  const [stats, setStats] = useState({ total: 0, logins: 0, pageViews: 0, uniqueUsers: 0 });
 
-  const getDateBounds = (): { from: string | null; to: string | null } => {
+  const getDateBounds = useCallback((): { from: string | null; to: string | null } => {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
@@ -76,23 +80,57 @@ export function ActivityLogs() {
       default:
         return { from: null, to: null };
     }
-  };
+  }, [dateRange, fromDate, toDate]);
 
-  const loadLogs = async () => {
+  const loadStats = useCallback(async () => {
+    const { from, to } = getDateBounds();
+
+    // Fetch all logs for stats (just id, action, user_email — lightweight)
+    let query = supabase
+      .from('audit_logs')
+      .select('action, user_email');
+
+    if (filterAction) query = query.eq('action', filterAction);
+    if (from) query = query.gte('created_at', from);
+    if (to) query = query.lte('created_at', to);
+
+    const { data } = await query;
+    const rows = data || [];
+
+    setStats({
+      total: rows.length,
+      logins: rows.filter(r => r.action === 'login').length,
+      pageViews: rows.filter(r => r.action === 'page_view').length,
+      uniqueUsers: new Set(rows.map(r => r.user_email).filter(Boolean)).size,
+    });
+  }, [filterAction, getDateBounds]);
+
+  const loadLogs = useCallback(async () => {
     try {
       setLoading(true);
+      const { from, to } = getDateBounds();
+      const offset = (currentPage - 1) * perPage;
 
+      // Get total count for pagination
+      let countQuery = supabase
+        .from('audit_logs')
+        .select('*', { count: 'exact', head: true });
+
+      if (filterAction) countQuery = countQuery.eq('action', filterAction);
+      if (from) countQuery = countQuery.gte('created_at', from);
+      if (to) countQuery = countQuery.lte('created_at', to);
+
+      const { count } = await countQuery;
+      setTotalCount(count || 0);
+
+      // Get paginated data
       let query = supabase
         .from('audit_logs')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(limit);
+        .range(offset, offset + perPage - 1);
 
-      if (filterAction) {
-        query = query.eq('action', filterAction);
-      }
-
-      const { from, to } = getDateBounds();
+      if (filterAction) query = query.eq('action', filterAction);
       if (from) query = query.gte('created_at', from);
       if (to) query = query.lte('created_at', to);
 
@@ -111,11 +149,21 @@ export function ActivityLogs() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterAction, currentPage, perPage, getDateBounds]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterAction, dateRange, fromDate, toDate, perPage]);
+
+  useEffect(() => {
+    loadLogs();
+    loadStats();
+  }, [loadLogs, loadStats]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await loadLogs();
+    await Promise.all([loadLogs(), loadStats()]);
     setRefreshing(false);
   };
 
@@ -148,10 +196,7 @@ export function ActivityLogs() {
     );
   });
 
-  // Stats
-  const uniqueUsers = new Set(logs.map(l => l.user_email).filter(Boolean)).size;
-  const loginCount = logs.filter(l => l.action === 'login').length;
-  const pageViewCount = logs.filter(l => l.action === 'page_view').length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
 
   const actionTypes = [
     { value: '', label: 'All Activity' },
@@ -161,7 +206,7 @@ export function ActivityLogs() {
     { value: 'action', label: 'Actions' },
   ];
 
-  if (loading) {
+  if (loading && logs.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-96">
         <div className="text-center">
@@ -191,7 +236,7 @@ export function ActivityLogs() {
             </div>
             <div>
               <p className="text-xs text-gray-500 dark:text-gray-400">Total Events</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">{logs.length}</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.total}</p>
             </div>
           </div>
         </div>
@@ -202,7 +247,7 @@ export function ActivityLogs() {
             </div>
             <div>
               <p className="text-xs text-gray-500 dark:text-gray-400">Logins</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">{loginCount}</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.logins}</p>
             </div>
           </div>
         </div>
@@ -213,7 +258,7 @@ export function ActivityLogs() {
             </div>
             <div>
               <p className="text-xs text-gray-500 dark:text-gray-400">Page Views</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">{pageViewCount}</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.pageViews}</p>
             </div>
           </div>
         </div>
@@ -224,7 +269,7 @@ export function ActivityLogs() {
             </div>
             <div>
               <p className="text-xs text-gray-500 dark:text-gray-400">Unique Users</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">{uniqueUsers}</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.uniqueUsers}</p>
             </div>
           </div>
         </div>
@@ -284,17 +329,6 @@ export function ActivityLogs() {
           </div>
         )}
 
-        <select
-          value={limit}
-          onChange={(e) => setLimit(parseInt(e.target.value))}
-          className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-        >
-          <option value={25}>25 logs</option>
-          <option value={50}>50 logs</option>
-          <option value={100}>100 logs</option>
-          <option value={200}>200 logs</option>
-        </select>
-
         <button
           onClick={handleRefresh}
           disabled={refreshing}
@@ -303,10 +337,6 @@ export function ActivityLogs() {
           <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
           Refresh
         </button>
-
-        <span className="text-gray-500 dark:text-gray-400 text-sm">
-          {filteredLogs.length} of {logs.length} events
-        </span>
       </div>
 
       {/* Logs Table */}
@@ -388,12 +418,70 @@ export function ActivityLogs() {
         {filteredLogs.length === 0 && (
           <div className="text-center py-8 px-6">
             <p className="text-gray-500 dark:text-gray-400">
-              {logs.length === 0
+              {totalCount === 0
                 ? 'No audit logs yet. Activity will appear here as users navigate the Command Center.'
                 : 'No logs match your search criteria.'}
             </p>
           </div>
         )}
+
+        {/* Pagination */}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30">
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              Showing {totalCount === 0 ? 0 : (currentPage - 1) * perPage + 1}–{Math.min(currentPage * perPage, totalCount)} of {totalCount} events
+            </span>
+            <select
+              value={perPage}
+              onChange={(e) => setPerPage(parseInt(e.target.value))}
+              className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+            >
+              <option value={20}>20 / page</option>
+              <option value={50}>50 / page</option>
+              <option value={100}>100 / page</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="First page"
+            >
+              <ChevronsLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Previous page"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            <span className="px-3 py-1 text-sm text-gray-700 dark:text-gray-300">
+              Page {currentPage} of {totalPages}
+            </span>
+
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Next page"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage === totalPages}
+              className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Last page"
+            >
+              <ChevronsRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
