@@ -1,7 +1,7 @@
 /**
- * Message Error Logs Component
- * Displays SMS and Email sending/receiving errors for support monitoring
- * Provides filtering by message type, direction, and workspace
+ * Error Logs Component
+ * Displays SMS, Email, and Voice sending/receiving errors for support monitoring
+ * Provides filtering by type, direction, and workspace
  */
 
 import { useState, useEffect } from 'react';
@@ -9,7 +9,26 @@ import { Filter, Mail, MessageSquare, AlertTriangle, Clock, RefreshCw, Phone, Ar
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { supabase } from '../../../lib/supabase';
 
-interface MessageErrorLog {
+type ErrorChannel = 'sms' | 'mms' | 'email' | 'voice';
+type ErrorDirection = 'inbound' | 'outbound' | 'unknown';
+
+interface UnifiedErrorLog {
+  id: string;
+  workspace_id: string;
+  source_table: 'message_error_logs' | 'voice_error_logs';
+  message_type: ErrorChannel;
+  direction: ErrorDirection;
+  error_code: string | null;
+  error_message: string;
+  details: Record<string, unknown>;
+  recipient: string | null;
+  sender: string | null;
+  message_body: string | null;
+  twilio_sid: string | null;
+  created_at: string;
+}
+
+interface MessageErrorRow {
   id: string;
   workspace_id: string;
   contact_id: string | null;
@@ -17,11 +36,21 @@ interface MessageErrorLog {
   direction: 'inbound' | 'outbound';
   error_code: string | null;
   error_message: string;
-  details: Record<string, any>;
+  details: Record<string, unknown> | null;
   recipient: string | null;
   sender: string | null;
   message_body: string | null;
   twilio_sid: string | null;
+  created_at: string;
+}
+
+interface VoiceErrorRow {
+  id: string;
+  workspace_id: string;
+  error_type: string | null;
+  message: string | null;
+  details: Record<string, unknown> | string | null;
+  call_sid: string | null;
   created_at: string;
 }
 
@@ -31,53 +60,187 @@ interface ErrorStats {
   byDirection: Record<string, number>;
 }
 
+const isObject = (value: unknown): value is Record<string, unknown> => {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+};
+
+const toDetailsObject = (value: unknown): Record<string, unknown> => {
+  if (isObject(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return isObject(parsed) ? parsed : { raw: value };
+    } catch {
+      return { raw: value };
+    }
+  }
+  return {};
+};
+
+const readString = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+};
+
+const inferVoiceDirection = (details: Record<string, unknown>, errorType: string | null): ErrorDirection => {
+  const source = readString(details.source)?.toLowerCase() || '';
+  const explicitDirection = readString(details.direction)?.toLowerCase() || readString(details.call_direction)?.toLowerCase() || '';
+  const status = readString(details.status)?.toLowerCase() || '';
+  const fallbackType = (errorType || '').toLowerCase();
+
+  if (explicitDirection === 'inbound' || explicitDirection === 'outbound') {
+    return explicitDirection;
+  }
+
+  if (source.includes('outbound') || fallbackType.includes('outbound') || source.includes('twilio_status_callback') || status === 'failed') {
+    return 'outbound';
+  }
+
+  if (source.includes('inbound') || fallbackType.includes('inbound')) {
+    return 'inbound';
+  }
+
+  return 'unknown';
+};
+
+const inferVoiceRecipient = (details: Record<string, unknown>, callSid: string | null): string | null => {
+  const context = isObject(details.context) ? details.context : {};
+  return (
+    readString((details as Record<string, unknown>).to_phone_number)
+    || readString((details as Record<string, unknown>).to)
+    || readString(context.to)
+    || readString((details as Record<string, unknown>).recipient)
+    || (callSid ? `Call ${callSid}` : null)
+  );
+};
+
+const inferVoiceSender = (details: Record<string, unknown>): string | null => {
+  const context = isObject(details.context) ? details.context : {};
+  return (
+    readString((details as Record<string, unknown>).from_phone_number)
+    || readString((details as Record<string, unknown>).from)
+    || readString(context.from)
+    || null
+  );
+};
+
+const inferVoiceErrorCode = (details: Record<string, unknown>): string | null => {
+  return (
+    readString((details as Record<string, unknown>).error_code)
+    || readString((details as Record<string, unknown>).code)
+    || readString((details as Record<string, unknown>).errorCode)
+    || readString((details as Record<string, unknown>).status)
+    || null
+  );
+};
+
 export function MessageErrorLogs() {
-  const [logs, setLogs] = useState<MessageErrorLog[]>([]);
+  const [logs, setLogs] = useState<UnifiedErrorLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filterMessageType, setFilterMessageType] = useState('');
   const [filterDirection, setFilterDirection] = useState('');
+  const [filterWorkspaceId, setFilterWorkspaceId] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [limit, setLimit] = useState(50);
   const [stats, setStats] = useState<ErrorStats>({ total: 0, byType: {}, byDirection: {} });
   const [workspaceNames, setWorkspaceNames] = useState<Record<string, string>>({});
+  const [workspaceOptions, setWorkspaceOptions] = useState<Array<{ id: string; name: string }>>([]);
 
   useEffect(() => {
     loadLogs();
-  }, [filterMessageType, filterDirection, limit]);
+  }, [filterMessageType, filterDirection, filterWorkspaceId, limit]);
 
   const loadLogs = async () => {
     try {
       setLoading(true);
 
-      let query = supabase
-        .from('message_error_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(limit);
+      const fetchLimit = Math.min(Math.max(limit * 3, 150), 500);
+
+      const [messageLogsResult, voiceLogsResult] = await Promise.all([
+        supabase
+          .from('message_error_logs')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(fetchLimit),
+        supabase
+          .from('voice_error_logs')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(fetchLimit)
+      ]);
+
+      if (messageLogsResult.error) {
+        console.error('Error loading message_error_logs:', messageLogsResult.error);
+      }
+      if (voiceLogsResult.error) {
+        console.error('Error loading voice_error_logs:', voiceLogsResult.error);
+      }
+
+      const messageRows = (messageLogsResult.data || []) as MessageErrorRow[];
+      const voiceRows = (voiceLogsResult.data || []) as VoiceErrorRow[];
+
+      const normalizedMessageLogs: UnifiedErrorLog[] = messageRows.map((row) => ({
+        id: `msg-${row.id}`,
+        workspace_id: row.workspace_id,
+        source_table: 'message_error_logs',
+        message_type: row.message_type,
+        direction: row.direction,
+        error_code: row.error_code,
+        error_message: row.error_message,
+        details: row.details || {},
+        recipient: row.recipient,
+        sender: row.sender,
+        message_body: row.message_body,
+        twilio_sid: row.twilio_sid,
+        created_at: row.created_at
+      }));
+
+      const normalizedVoiceLogs: UnifiedErrorLog[] = voiceRows.map((row) => {
+        const details = toDetailsObject(row.details);
+        return {
+          id: `voice-${row.id}`,
+          workspace_id: row.workspace_id,
+          source_table: 'voice_error_logs',
+          message_type: 'voice',
+          direction: inferVoiceDirection(details, row.error_type),
+          error_code: inferVoiceErrorCode(details),
+          error_message: row.message || row.error_type || 'Voice error',
+          details,
+          recipient: inferVoiceRecipient(details, row.call_sid),
+          sender: inferVoiceSender(details),
+          message_body: null,
+          twilio_sid: row.call_sid,
+          created_at: row.created_at
+        };
+      });
+
+      let combinedLogs = [...normalizedMessageLogs, ...normalizedVoiceLogs]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       if (filterMessageType) {
-        query = query.eq('message_type', filterMessageType);
+        combinedLogs = combinedLogs.filter((log) => log.message_type === filterMessageType);
       }
 
       if (filterDirection) {
-        query = query.eq('direction', filterDirection);
+        combinedLogs = combinedLogs.filter((log) => log.direction === filterDirection);
       }
 
-      const { data, error } = await query;
+      const uniqueIds = [...new Set(combinedLogs.map((l) => l.workspace_id).filter(Boolean))];
 
-      if (error) {
-        console.error('Error loading message error logs:', error);
-        setLogs([]);
-        return;
+      if (filterWorkspaceId) {
+        combinedLogs = combinedLogs.filter((log) => log.workspace_id === filterWorkspaceId);
       }
 
-      setLogs(data || []);
+      const limitedLogs = combinedLogs.slice(0, limit);
+      setLogs(limitedLogs);
 
-      // Fetch workspace names for all unique workspace IDs
-      const allLogs = data || [];
-      const uniqueIds = [...new Set(allLogs.map(l => l.workspace_id).filter(Boolean))];
       if (uniqueIds.length > 0) {
+        if (filterWorkspaceId && !uniqueIds.includes(filterWorkspaceId)) {
+          setFilterWorkspaceId('');
+        }
+
         const { data: workspaces } = await supabase
           .from('workspaces')
           .select('id, name')
@@ -88,24 +251,38 @@ export function MessageErrorLogs() {
             nameMap[String(ws.id)] = ws.name;
           });
           setWorkspaceNames(nameMap);
+          setWorkspaceOptions(
+            uniqueIds
+              .map((workspaceId) => ({ id: workspaceId, name: nameMap[workspaceId] || workspaceId }))
+              .sort((a, b) => a.name.localeCompare(b.name))
+          );
+        } else {
+          setWorkspaceNames({});
+          setWorkspaceOptions(
+            uniqueIds
+              .map((workspaceId) => ({ id: workspaceId, name: workspaceId }))
+              .sort((a, b) => a.name.localeCompare(b.name))
+          );
         }
+      } else {
+        setWorkspaceNames({});
+        setWorkspaceOptions([]);
       }
 
-      // Calculate stats
       const newStats: ErrorStats = {
-        total: allLogs.length,
+        total: combinedLogs.length,
         byType: {},
         byDirection: {}
       };
 
-      allLogs.forEach(log => {
+      combinedLogs.forEach((log) => {
         newStats.byType[log.message_type] = (newStats.byType[log.message_type] || 0) + 1;
         newStats.byDirection[log.direction] = (newStats.byDirection[log.direction] || 0) + 1;
       });
 
       setStats(newStats);
     } catch (error) {
-      console.error('Error loading message error logs:', error);
+      console.error('Error loading error logs:', error);
       setLogs([]);
     } finally {
       setLoading(false);
@@ -123,6 +300,7 @@ export function MessageErrorLogs() {
       case 'sms': return MessageSquare;
       case 'mms': return Phone;
       case 'email': return Mail;
+      case 'voice': return Phone;
       default: return AlertTriangle;
     }
   };
@@ -132,14 +310,19 @@ export function MessageErrorLogs() {
       case 'sms': return 'bg-blue-500/10 text-blue-400 border-blue-500/30';
       case 'mms': return 'bg-purple-500/10 text-purple-400 border-purple-500/30';
       case 'email': return 'bg-green-500/10 text-green-400 border-green-500/30';
+      case 'voice': return 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/30';
       default: return 'bg-gray-500/10 text-gray-400 border-gray-500/30';
     }
   };
 
   const getDirectionBadgeColor = (direction: string): string => {
-    return direction === 'outbound'
-      ? 'bg-orange-500/10 text-orange-400 border-orange-500/30'
-      : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30';
+    if (direction === 'outbound') {
+      return 'bg-orange-500/10 text-orange-400 border-orange-500/30';
+    }
+    if (direction === 'inbound') {
+      return 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30';
+    }
+    return 'bg-gray-500/10 text-gray-400 border-gray-500/30';
   };
 
   const formatDate = (dateString: string): string => {
@@ -162,19 +345,19 @@ export function MessageErrorLogs() {
     return `${diffDays}d ago`;
   };
 
-  // Filter logs based on search term
-  const filteredLogs = logs.filter(log => {
+  const filteredLogs = logs.filter((log) => {
     if (!searchTerm) return true;
 
     const searchLower = searchTerm.toLowerCase();
     return (
-      log.error_message?.toLowerCase().includes(searchLower) ||
-      log.error_code?.toLowerCase().includes(searchLower) ||
-      log.recipient?.toLowerCase().includes(searchLower) ||
-      log.sender?.toLowerCase().includes(searchLower) ||
-      workspaceNames[log.workspace_id]?.toLowerCase().includes(searchLower) ||
-      log.workspace_id?.toLowerCase().includes(searchLower) ||
-      log.twilio_sid?.toLowerCase().includes(searchLower)
+      log.error_message?.toLowerCase().includes(searchLower)
+      || log.error_code?.toLowerCase().includes(searchLower)
+      || log.recipient?.toLowerCase().includes(searchLower)
+      || log.sender?.toLowerCase().includes(searchLower)
+      || workspaceNames[log.workspace_id]?.toLowerCase().includes(searchLower)
+      || log.workspace_id?.toLowerCase().includes(searchLower)
+      || log.twilio_sid?.toLowerCase().includes(searchLower)
+      || log.message_type?.toLowerCase().includes(searchLower)
     );
   });
 
@@ -182,13 +365,15 @@ export function MessageErrorLogs() {
     { value: '', label: 'All Types' },
     { value: 'sms', label: 'SMS' },
     { value: 'mms', label: 'MMS' },
-    { value: 'email', label: 'Email' }
+    { value: 'email', label: 'Email' },
+    { value: 'voice', label: 'Voice' }
   ];
 
   const directions = [
     { value: '', label: 'All Directions' },
     { value: 'outbound', label: 'Outbound' },
-    { value: 'inbound', label: 'Inbound' }
+    { value: 'inbound', label: 'Inbound' },
+    { value: 'unknown', label: 'Unknown' }
   ];
 
   if (loading) {
@@ -196,7 +381,7 @@ export function MessageErrorLogs() {
       <div className="flex items-center justify-center min-h-96">
         <div className="text-center">
           <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent mb-4"></div>
-          <p className="text-gray-400">Loading message error logs...</p>
+          <p className="text-gray-400">Loading error logs...</p>
         </div>
       </div>
     );
@@ -207,15 +392,15 @@ export function MessageErrorLogs() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Message Error Logs</h2>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Error Logs</h2>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            SMS and Email sending/receiving failures
+            SMS, Email, and Voice sending/receiving failures
           </p>
         </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
@@ -227,7 +412,7 @@ export function MessageErrorLogs() {
             </div>
           </div>
         </div>
-        
+
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
@@ -241,7 +426,7 @@ export function MessageErrorLogs() {
             </div>
           </div>
         </div>
-        
+
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
@@ -253,7 +438,19 @@ export function MessageErrorLogs() {
             </div>
           </div>
         </div>
-        
+
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-fuchsia-100 dark:bg-fuchsia-900/30 rounded-lg">
+              <Phone className="w-5 h-5 text-fuchsia-600 dark:text-fuchsia-400" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Voice Errors</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.byType.voice || 0}</p>
+            </div>
+          </div>
+        </div>
+
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
@@ -270,7 +467,7 @@ export function MessageErrorLogs() {
       {/* Error Rate by Workspace Chart */}
       {logs.length > 0 && (() => {
         const counts: Record<string, number> = {};
-        logs.forEach(log => {
+        logs.forEach((log) => {
           const name = workspaceNames[log.workspace_id] || log.workspace_id || 'Unknown';
           counts[name] = (counts[name] || 0) + 1;
         });
@@ -339,8 +536,21 @@ export function MessageErrorLogs() {
         </select>
 
         <select
+          value={filterWorkspaceId}
+          onChange={(e) => setFilterWorkspaceId(e.target.value)}
+          className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none min-w-52"
+        >
+          <option value="">All Workspaces</option>
+          {workspaceOptions.map((workspace) => (
+            <option key={workspace.id} value={workspace.id}>
+              {workspace.name}
+            </option>
+          ))}
+        </select>
+
+        <select
           value={limit}
-          onChange={(e) => setLimit(parseInt(e.target.value))}
+          onChange={(e) => setLimit(parseInt(e.target.value, 10))}
           className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
         >
           <option value={25}>25 logs</option>
@@ -421,8 +631,10 @@ export function MessageErrorLogs() {
                       <div className="flex items-center gap-2">
                         {log.direction === 'outbound' ? (
                           <ArrowUpRight className="w-4 h-4 text-orange-400" />
-                        ) : (
+                        ) : log.direction === 'inbound' ? (
                           <ArrowDownLeft className="w-4 h-4 text-cyan-400" />
+                        ) : (
+                          <AlertTriangle className="w-4 h-4 text-gray-400" />
                         )}
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getDirectionBadgeColor(log.direction)}`}>
                           {log.direction}
@@ -440,12 +652,17 @@ export function MessageErrorLogs() {
                             Code: {log.error_code}
                           </span>
                         )}
+                        {log.twilio_sid && (
+                          <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono">
+                            Ref: {log.twilio_sid}
+                          </span>
+                        )}
                       </div>
                     </td>
 
                     <td className="px-6 py-4">
                       <span className="text-sm font-mono text-gray-900 dark:text-white">
-                        {log.recipient || 'N/A'}
+                        {log.recipient || log.sender || log.twilio_sid || 'N/A'}
                       </span>
                     </td>
 
@@ -466,7 +683,7 @@ export function MessageErrorLogs() {
             <AlertTriangle className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
             <p className="text-gray-500 dark:text-gray-400">
               {logs.length === 0
-                ? 'No message errors found. This is good news! 🎉'
+                ? 'No errors found. This is good news!'
                 : 'No errors match your search criteria.'}
             </p>
           </div>

@@ -416,7 +416,7 @@ const OFFICES: OfficeNode[] = [
   {
     id: 'message-error-logs',
     title: 'Error Beacon',
-    subtitle: 'Msg Errors',
+    subtitle: 'Error Logs',
     icon: AlertTriangle,
     neighborhoodId: 'monitoring',
     x: 93,

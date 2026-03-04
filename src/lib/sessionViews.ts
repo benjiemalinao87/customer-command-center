@@ -9,7 +9,7 @@ const SESSION_VIEW_LABELS: Record<string, string> = {
   'user-details': 'Users',
   'api-monitoring': 'API Monitoring',
   'activity-logs': 'Audit Logs',
-  'message-error-logs': 'Message Error Logs',
+  'message-error-logs': 'Error Logs',
   'system-logs': 'System Logs',
   'cache-system': 'Cache',
   documentation: 'Documentation',

@@ -44,7 +44,7 @@ export function Sidebar({ currentView, onViewChange, darkMode, onToggleDarkMode,
         { id: 'api-monitoring', icon: BarChart2, label: 'API' },
         { id: 'system-logs', icon: ScrollText, label: 'System Logs' },
         { id: 'activity-logs', icon: FileText, label: 'Audit Logs' },
-        { id: 'message-error-logs', icon: AlertTriangle, label: 'Msg Errors' },
+        { id: 'message-error-logs', icon: AlertTriangle, label: 'Error Logs' },
       ],
     },
     {
