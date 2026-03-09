@@ -28,7 +28,7 @@ const INCIDENTS_BASE = 'https://cc1.automate8.com/_gateway/incidents';
 const DOMAINS = [
   { url: 'https://cc1.automate8.com', gateway: true },
   { url: 'https://dash.customerconnects.app', gateway: true },
-  { url: 'https://app2.channelautomation.com', gateway: false, note: 'Direct Railway origin (no gateway)' },
+  { url: 'https://app2.channelautomation.com', gateway: true, note: 'app2-failover-gateway (separate CF Worker)' },
 ];
 
 interface ResponseHistoryEntry {

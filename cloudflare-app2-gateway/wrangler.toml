@@ -1,0 +1,19 @@
+name = "app2-failover-gateway"
+main = "src/index.ts"
+compatibility_date = "2025-01-16"
+
+# IMPORTANT: Set this to the channelautomation.com account ID
+account_id = "208f128290b10d58d5de18909148acc0"
+
+# Route for app2.channelautomation.com
+routes = [
+  { pattern = "app2.channelautomation.com/*", zone_name = "channelautomation.com" }
+]
+
+[vars]
+# Primary origin - Railway
+RAILWAY_ORIGIN = "https://frontend-production-cabf.up.railway.app"
+# Fallback - Cloudflare Pages (your existing deployment)
+CF_PAGES_ORIGIN = "https://appv3.channelautomation.com"
+# Timeout in ms for each origin attempt
+ORIGIN_TIMEOUT = "3000"
