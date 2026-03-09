@@ -39,7 +39,7 @@ type View = 'dashboard' | 'visitors' | 'user-activity' | 'user-details' | 'api-m
 const SIDEBAR_UNLOCKED_KEY = 'command_center_sidebar_unlocked';
 
 function App() {
-  const [currentView, setCurrentView] = useState<View>('office-map');
+  const [currentView, setCurrentView] = useState<View>('dashboard');
   const [isSidebarVisible, setIsSidebarVisible] = useState(() => {
     return sessionStorage.getItem(SIDEBAR_UNLOCKED_KEY) === '1';
   });
@@ -95,8 +95,8 @@ function App() {
       // Initialize analytics services with user context
       if (session?.user) {
         if (event === 'SIGNED_IN') {
-          setCurrentView('office-map');
-          hideSidebarForMapFocus();
+          setCurrentView('dashboard');
+          unlockSidebar();
         }
 
         connectionAnalytics.initialize(null, session.user.id);
@@ -189,8 +189,8 @@ function App() {
   };
 
   const handleLoginSuccess = () => {
-    setCurrentView('office-map');
-    hideSidebarForMapFocus();
+    setCurrentView('dashboard');
+    unlockSidebar();
     checkAuth();
   };
 
